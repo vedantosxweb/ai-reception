@@ -1,9 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
+import { verifyToken } from '@/lib/auth-edge'
 
 const PUBLIC_PATHS = ['/auth', '/api/auth/login', '/api/auth/signup', '/api/twilio']
 
-export function middleware(req: NextRequest) {
+export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl
 
   // Allow public paths
@@ -17,7 +17,7 @@ export function middleware(req: NextRequest) {
   }
 
   const token = req.cookies.get('ar_token')?.value
-  const payload = token ? verifyToken(token) : null
+  const payload = token ? await verifyToken(token) : null
 
   // Not authenticated → go to /auth
   if (!payload) {
