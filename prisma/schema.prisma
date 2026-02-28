@@ -1,0 +1,181 @@
+// AI Receptionist Database Schema - Production Ready
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String
+  password     String
+  role         String   @default("user")
+  avatar       String?
+  phone        String?
+  businessName String?
+  status       String   @default("active")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  appointments  Appointment[] @relation("StaffAppointments")
+  conversations Conversation[]
+}
+
+model Contact {
+  id          String    @id @default(cuid())
+  firstName   String
+  lastName    String
+  email       String?
+  phone       String?
+  company     String?
+  position    String?
+  source      String?
+  status      String    @default("lead")
+  tags        String?
+  notes       String?
+  lastContact DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  appointments  Appointment[]
+  conversations Conversation[]
+  messages      Message[]
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  duration    Int      @default(30)
+  price       Float    @default(0)
+  category    String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  appointments Appointment[]
+}
+
+model Appointment {
+  id          String    @id @default(cuid())
+  contactId   String
+  contact     Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  serviceId   String?
+  service     Service?  @relation(fields: [serviceId], references: [id])
+  staffId     String?
+  staff       User?     @relation("StaffAppointments", fields: [staffId], references: [id])
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+  status      String    @default("scheduled")
+  source      String    @default("manual")
+  notes       String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  contactId String?
+  contact   Contact?  @relation(fields: [contactId], references: [id])
+  userId    String?
+  user      User?     @relation(fields: [userId], references: [id])
+  channel   String    @default("chat")
+  status    String    @default("active")
+  summary   String?
+  intent    String?
+  sentiment String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  messages Message[]
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  contactId      String?
+  contact        Contact?     @relation(fields: [contactId], references: [id])
+  role           String
+  content        String
+  messageType    String       @default("text")
+  metadata       String?
+  latency        Int?
+  createdAt      DateTime     @default(now())
+}
+
+model CallLog {
+  id          String   @id @default(cuid())
+  contactId   String?
+  phoneNumber String
+  direction   String
+  status      String
+  duration    Int?
+  recording   String?
+  transcript  String?
+  summary     String?
+  sentiment   String?
+  intent      String?
+  resolved    Boolean  @default(false)
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model WhatsAppSession {
+  id          String    @id @default(cuid())
+  phoneNumber String    @unique
+  contactId   String?
+  status      String    @default("active")
+  lastMessage DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  messages WhatsAppMessage[]
+}
+
+model WhatsAppMessage {
+  id          String          @id @default(cuid())
+  sessionId   String
+  session     WhatsAppSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  direction   String
+  content     String
+  messageType String          @default("text")
+  status      String          @default("sent")
+  createdAt   DateTime        @default(now())
+}
+
+model AIConfig {
+  id              String   @id @default(cuid())
+  name            String
+  type            String
+  promptTemplate  String
+  voiceEnabled    Boolean  @default(true)
+  whatsappEnabled Boolean  @default(true)
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model BusinessHours {
+  id        String  @id @default(cuid())
+  dayOfWeek Int
+  openTime  String
+  closeTime String
+  isOpen    Boolean @default(true)
+}
+
+model SystemSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String
+  category  String
+  updatedAt DateTime @updatedAt
+}
