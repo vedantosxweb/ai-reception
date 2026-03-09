@@ -117,6 +117,168 @@ interface PhoneRecordWithRelations {
   } | null;
 }
 
+interface BookingDataLike {
+  name?: string;
+  date?: string;
+  time?: string;
+  service?: string;
+}
+
+function cleanAIText(text: string): string {
+  return (text || '')
+    .replace(/\[CHECK_AVAILABILITY:[^\]]+\]/g, '')
+    .replace(/\[TRANSFER:[^\]]+\]/g, '')
+    .replace(/\[BOOKING:[^\]]+\]/g, '')
+    .replace(/\[CANCEL_BOOKING\]/g, '')
+    .trim();
+}
+
+async function sendAndStoreWhatsAppMessage(params: {
+  tenantId: string;
+  phoneNumberId: string;
+  contactId?: string;
+  fromNumber: string;
+  toNumber: string;
+  body: string;
+}) {
+  const { sendWhatsApp } = await import('@/lib/telephony/twilio.service');
+  const result = await sendWhatsApp(params.toNumber, params.body, params.fromNumber);
+
+  const outgoingExists = result.messageSid
+    ? await db.sMSMessage.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          providerSid: result.messageSid,
+          direction: 'OUTBOUND',
+        },
+        select: { id: true },
+      })
+    : null;
+
+  if (!outgoingExists) {
+    await db.sMSMessage.create({
+      data: {
+        tenantId: params.tenantId,
+        phoneNumberId: params.phoneNumberId,
+        contactId: params.contactId,
+        direction: 'OUTBOUND',
+        fromNumber: params.fromNumber,
+        toNumber: params.toNumber,
+        body: params.body,
+        providerSid: result.messageSid,
+        status: result.success ? 'sent' : 'failed',
+        messageType: 'text',
+      },
+    });
+
+    await db.usageRecord.create({
+      data: {
+        tenantId: params.tenantId,
+        type: 'SMS_SENT',
+        quantity: 1,
+        periodStart: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+        periodEnd: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
+      },
+    });
+  }
+}
+
+async function buildAvailabilityMessage(
+  tenantId: string,
+  date: string,
+  time: string
+): Promise<string> {
+  try {
+    const { CalendarService } = await import('@/lib/services/calendar.service');
+    const checkDate = new Date(`${date}T${time}:00`);
+    if (isNaN(checkDate.getTime())) {
+      return 'SLOT_UNAVAILABLE: The requested date/time format was invalid. Please ask for date in YYYY-MM-DD and time in HH:MM.';
+    }
+
+    const tenant = await db.tenant.findUnique({
+      where: { id: tenantId },
+      select: { defaultMeetingDurationMinutes: true },
+    });
+    const durationMin = tenant?.defaultMeetingDurationMinutes ?? 30;
+    const requestedEnd = new Date(checkDate.getTime() + durationMin * 60 * 1000);
+
+    const conflict = await db.appointment.findFirst({
+      where: {
+        tenantId,
+        status: { in: ['scheduled', 'confirmed'] },
+        startTime: { lt: requestedEnd },
+        endTime: { gt: checkDate },
+      },
+    });
+
+    if (!conflict) {
+      const friendlyDate = checkDate.toLocaleDateString('en-US', {
+        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+      });
+      const friendlyTime = checkDate.toLocaleTimeString('en-US', {
+        hour: 'numeric', minute: '2-digit', hour12: true,
+      });
+      return `SLOT_AVAILABLE: ${friendlyTime} on ${friendlyDate} is free and available for booking.`;
+    }
+
+    const slots = await CalendarService.getAvailability(tenantId, checkDate, durationMin);
+    const requestedMs = checkDate.getTime();
+    const sorted = slots
+      .sort((a, b) => Math.abs(a.start.getTime() - requestedMs) - Math.abs(b.start.getTime() - requestedMs))
+      .slice(0, 3);
+
+    const requestedTimeStr = checkDate.toLocaleTimeString('en-US', {
+      hour: 'numeric', minute: '2-digit', hour12: true,
+    });
+
+    if (sorted.length > 0) {
+      const altList = sorted.map((s) =>
+        s.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+      ).join(', ');
+      return `SLOT_UNAVAILABLE: ${requestedTimeStr} is already taken. 3 nearest available times: ${altList}. Please offer these to the caller.`;
+    }
+
+    return `SLOT_UNAVAILABLE: ${requestedTimeStr} is taken and there are no more available slots today. Please ask the caller to choose a different date.`;
+  } catch (error) {
+    log.webhook.error({ error, tenantId, date, time }, 'WhatsApp availability check error');
+    return 'SLOT_AVAILABLE: Unable to verify right now. Ask the caller to confirm if they want to proceed.';
+  }
+}
+
+async function createWhatsAppBooking(params: {
+  tenantId: string;
+  contactId?: string;
+  from: string;
+  bookingData?: BookingDataLike;
+  durationMinutes?: number;
+}) {
+  const bd = params.bookingData || {};
+  if (!params.contactId || !bd.date || !bd.time) return;
+
+  const startTime = new Date(`${bd.date}T${bd.time}:00`);
+  if (isNaN(startTime.getTime())) return;
+
+  const durationMin = params.durationMinutes ?? 30;
+  const endTime = new Date(startTime.getTime() + durationMin * 60 * 1000);
+
+  try {
+    const { CalendarService } = await import('@/lib/services/calendar.service');
+    await CalendarService.createAppointment({
+      tenantId: params.tenantId,
+      contactId: params.contactId,
+      title: `Appointment: ${bd.name || 'WhatsApp User'} - ${bd.service || 'General'}`,
+      description: `Booked via WhatsApp AI receptionist. Phone: ${params.from}`,
+      startTime,
+      endTime,
+      source: 'whatsapp',
+      notes: bd.service ? `Service: ${bd.service}` : undefined,
+    });
+    log.webhook.info({ bookingData: bd }, 'WhatsApp booking created');
+  } catch (error) {
+    log.webhook.error({ error, bookingData: bd }, 'WhatsApp booking creation error');
+  }
+}
+
 async function handleWhatsAppMessage(
   phoneRecord: PhoneRecordWithRelations,
   from: string,
@@ -204,85 +366,67 @@ async function handleWhatsAppMessage(
     customerMemory: await buildCustomerMemoryContext(tenant.id, from),
   });
 
-  const aiResponse = await generateAIResponse(body, context, {
+  const aiConfig = {
     llmProvider: receptionist.llmProvider,
     llmModel: receptionist.llmModel,
     temperature: receptionist.temperature,
     maxTokens: receptionist.maxTokens,
     systemPrompt,
     knowledgeContext: knowledgeContext || undefined,
-  });
+  };
 
-  // Clean response text — remove [TRANSFER:...], [BOOKING:...], [CANCEL_BOOKING] markers
-  const cleanText = aiResponse.text
-    .replace(/\[TRANSFER:[^\]]+\]/g, '')
-    .replace(/\[BOOKING:[^\]]+\]/g, '')
-    .replace(/\[CANCEL_BOOKING\]/g, '')
-    .trim();
+  const aiResponse = await generateAIResponse(body, context, aiConfig);
+
+  const cleanText = cleanAIText(aiResponse.text);
 
   // Handle booking completion — create appointment via CalendarService
-  if (aiResponse.bookingComplete && (aiResponse as any).text.match(/\[BOOKING:/)) {
-    try {
-      const { CalendarService } = await import('@/lib/services/calendar.service');
-      const bd = context.metadata?.bookingData || {};
-      const startTime = new Date(`${bd.date}T${bd.time}:00`);
-      const endTime = new Date(startTime.getTime() + 30 * 60 * 1000);
-      await CalendarService.createAppointment({
-        tenantId: tenant.id,
-        contactId,
-        title: `Appointment: ${bd.name || 'WhatsApp User'} - ${bd.service || 'General'}`,
-        description: `Booked via WhatsApp AI receptionist. Phone: ${from}`,
-        startTime,
-        endTime,
-        source: 'whatsapp',
-        notes: bd.service ? `Service: ${bd.service}` : undefined,
-      });
-      log.webhook.info({ bookingData: bd }, 'WhatsApp booking created');
-    } catch (err) {
-      log.webhook.error({ error: err }, 'WhatsApp booking creation error');
-    }
+  if (aiResponse.bookingComplete && aiResponse.text.match(/\[BOOKING:/)) {
+    await createWhatsAppBooking({
+      tenantId: tenant.id,
+      contactId,
+      from,
+      bookingData: context.metadata?.bookingData as BookingDataLike | undefined,
+      durationMinutes: tenant.defaultMeetingDurationMinutes ?? 30,
+    });
   }
 
-  // Send WhatsApp reply via Twilio
-  const { sendWhatsApp } = await import('@/lib/telephony/twilio.service');
-  const result = await sendWhatsApp(from, cleanText || 'Thank you for your message.', phoneRecord.number);
+  await sendAndStoreWhatsAppMessage({
+    tenantId: tenant.id,
+    phoneNumberId: phoneRecord.id,
+    contactId,
+    fromNumber: phoneRecord.number,
+    toNumber: from,
+    body: cleanText || 'Thank you for your message.',
+  });
 
-  // Store outgoing message
-  const outgoingExists = result.messageSid
-    ? await db.sMSMessage.findFirst({
-        where: {
-          tenantId: tenant.id,
-          providerSid: result.messageSid,
-          direction: 'OUTBOUND',
-        },
-        select: { id: true },
-      })
-    : null;
+  if (aiResponse.availabilityCheckRequest) {
+    const { date, time } = aiResponse.availabilityCheckRequest;
+    const availabilityMessage = await buildAvailabilityMessage(tenant.id, date, time);
 
-  if (!outgoingExists) {
-    await db.sMSMessage.create({
-      data: {
+    const followupResponse = await generateAIResponse(
+      `[SYSTEM: Availability check result] ${availabilityMessage}`,
+      context,
+      aiConfig
+    );
+
+    if (followupResponse.bookingComplete && followupResponse.text.match(/\[BOOKING:/)) {
+      await createWhatsAppBooking({
         tenantId: tenant.id,
-        phoneNumberId: phoneRecord.id,
         contactId,
-        direction: 'OUTBOUND',
-        fromNumber: phoneRecord.number,
-        toNumber: from,
-        body: cleanText,
-        providerSid: result.messageSid,
-        status: result.success ? 'sent' : 'failed',
-        messageType: 'text',
-      },
-    });
+        from,
+        bookingData: context.metadata?.bookingData as BookingDataLike | undefined,
+        durationMinutes: tenant.defaultMeetingDurationMinutes ?? 30,
+      });
+    }
 
-    await db.usageRecord.create({
-      data: {
-        tenantId: tenant.id,
-        type: 'SMS_SENT',
-        quantity: 1,
-        periodStart: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
-        periodEnd: new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0),
-      },
+    const followupCleanText = cleanAIText(followupResponse.text);
+    await sendAndStoreWhatsAppMessage({
+      tenantId: tenant.id,
+      phoneNumberId: phoneRecord.id,
+      contactId,
+      fromNumber: phoneRecord.number,
+      toNumber: from,
+      body: followupCleanText || 'I checked availability. Please share another time if needed.',
     });
   }
 
