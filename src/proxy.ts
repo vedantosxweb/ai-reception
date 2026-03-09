@@ -1,12 +1,14 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { getToken } from 'next-auth/jwt';
+import { getAuthSecret } from '@/lib/auth-env';
 
 const AUTH_PAGES = ['/login', '/signup'] as const;
 const PROTECTED_PAGES = ['/dashboard', '/onboarding'] as const;
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const authSecret = getAuthSecret();
 
   // Skip static assets and Next internals
   if (
@@ -19,7 +21,7 @@ export async function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
+  const token = await getToken({ req, secret: authSecret || undefined });
   const isAuthed = Boolean(token?.sub);
 
   // Redirect authenticated users away from auth pages

@@ -8,17 +8,18 @@ import { db } from '@/lib/db';
 import { log } from '@/lib/logger';
 import bcryptjs from 'bcryptjs';
 import type { UserRole } from '@prisma/client';
+import { getAuthBaseUrl, getAuthSecret } from '@/lib/auth-env';
 
-if (process.env.NEXTAUTH_URL) {
-  process.env.NEXTAUTH_URL = process.env.NEXTAUTH_URL.trim();
-}
-if (process.env.NEXTAUTH_SECRET) {
-  process.env.NEXTAUTH_SECRET = process.env.NEXTAUTH_SECRET.trim();
+const authBaseUrl = getAuthBaseUrl();
+const authSecret = getAuthSecret();
+process.env.NEXTAUTH_URL = authBaseUrl;
+if (authSecret) {
+  process.env.NEXTAUTH_SECRET = authSecret;
 }
 
 export const authOptions: NextAuthOptions = {
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 }, // 30 days
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: authSecret || undefined,
   pages: {
     signIn: '/login',
   },
