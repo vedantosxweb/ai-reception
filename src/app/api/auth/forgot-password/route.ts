@@ -8,6 +8,7 @@ import { sendPasswordResetEmail } from '@/lib/email/email.service';
 import { isEmailConfigured } from '@/lib/email/email.service';
 import { checkRateLimitRedis } from '@/lib/redis';
 import crypto from 'crypto';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 const RESET_EXPIRY_MS = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_PER_EMAIL = 5;
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
       data: { resetToken, resetTokenExpires },
     });
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = getAppBaseUrl();
     const resetLink = `${appUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
 
     const sent = await sendPasswordResetEmail(user.email, resetLink);

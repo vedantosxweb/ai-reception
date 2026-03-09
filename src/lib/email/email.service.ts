@@ -6,6 +6,7 @@
 import { Resend } from 'resend';
 import { db } from '@/lib/db';
 import { log } from '@/lib/logger';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 // =============================================================================
 // Client
@@ -29,7 +30,7 @@ const fromEmail = () =>
   process.env.RESEND_FROM_EMAIL || 'AI Receptionist <notifications@resend.dev>';
 
 const appUrl = () =>
-  process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+  getAppBaseUrl();
 
 // =============================================================================
 // Helpers
@@ -127,6 +128,14 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
       Reset password
     </a>
     <p style="margin:24px 0 0;font-size:12px;color:#94a3b8;">If you didn't request this, you can ignore this email.</p>`;
+  const text = [
+    'Reset your AI Receptionist password',
+    '',
+    'Use this link to reset your password (valid for 1 hour):',
+    resetLink,
+    '',
+    "If you didn't request this, you can ignore this email.",
+  ].join('\n');
 
   try {
     await resend.emails.send({
@@ -134,6 +143,7 @@ export async function sendPasswordResetEmail(to: string, resetLink: string): Pro
       to: [to],
       subject: 'Reset your AI Receptionist password',
       html: emailShell('Reset password', body),
+      text,
     });
     return true;
   } catch (error) {
