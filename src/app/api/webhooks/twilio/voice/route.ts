@@ -284,7 +284,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
   // Get tenant info
   const tenant = await db.tenant.findUnique({
     where: { id: session.tenantId },
-    select: { name: true, description: true, defaultMeetingDurationMinutes: true },
+    select: { name: true, description: true, timezone: true, defaultMeetingDurationMinutes: true },
   });
   const customerMemory = await buildCustomerMemoryContext(session.tenantId, session.callerNumber || from);
 
@@ -323,6 +323,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
     channel: 'voice',
     operatingMode: receptionist.operatingMode,
     language: voiceLang,
+    timezone: tenant?.timezone || 'UTC',
     defaultMeetingDurationMinutes: tenant?.defaultMeetingDurationMinutes ?? 30,
     customerMemory,
   });
@@ -538,6 +539,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
           channel: 'voice',
           operatingMode: receptionist.operatingMode,
           language: voiceLang,
+          timezone: tenant?.timezone || 'UTC',
           defaultMeetingDurationMinutes: tenant?.defaultMeetingDurationMinutes ?? 30,
           customerMemory,
         }),

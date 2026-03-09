@@ -266,34 +266,113 @@ export class KnowledgeBaseService {
     query: string,
     maxChunks: number = 5
   ): Promise<string> {
-    // For now, use simple keyword matching
-    // In production with vector DB, this would do similarity search
-    const embeddings = await db.embedding.findMany({
+    // Prefer receptionist-specific sources (including tenant-level shared sources),
+    // then gracefully fall back to tenant-wide knowledge if scoped content is missing.
+    const scopedKnowledgeWhere = {
+      status: 'READY' as const,
+      OR: [{ receptionistId }, { receptionistId: null }],
+    };
+
+    let embeddings = await db.embedding.findMany({
       where: {
         tenantId,
-        knowledgeSource: {
-          receptionistId,
-          status: 'READY',
-        },
+        knowledgeSource: scopedKnowledgeWhere,
       },
       select: { content: true },
     });
 
-    if (embeddings.length === 0) return '';
+    if (embeddings.length === 0) {
+      embeddings = await db.embedding.findMany({
+        where: {
+          tenantId,
+          knowledgeSource: { status: 'READY' },
+        },
+        select: { content: true },
+      });
+    }
 
-    // Simple relevance scoring
-    const queryWords = query.toLowerCase().split(/\s+/);
+    if (embeddings.length === 0) {
+      let rawSources = await db.knowledgeSource.findMany({
+        where: {
+          tenantId,
+          OR: [{ receptionistId }, { receptionistId: null }],
+          NOT: { status: 'ERROR' },
+          content: { not: null },
+        },
+        select: {
+          name: true,
+          url: true,
+          content: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 3,
+      });
+
+      if (rawSources.length === 0) {
+        rawSources = await db.knowledgeSource.findMany({
+          where: {
+            tenantId,
+            NOT: { status: 'ERROR' },
+            content: { not: null },
+          },
+          select: {
+            name: true,
+            url: true,
+            content: true,
+          },
+          orderBy: { updatedAt: 'desc' },
+          take: 3,
+        });
+      }
+
+      const fallback = rawSources
+        .filter((s) => !!s.content)
+        .map((s) => {
+          const sourceLabel = s.url ? `${s.name} (${s.url})` : s.name;
+          return `Source: ${sourceLabel}\n${(s.content || '').slice(0, 1500)}`;
+        })
+        .join('\n\n');
+
+      return fallback;
+    }
+
+    // Basic lexical relevance scoring.
+    const stopWords = new Set([
+      'a', 'an', 'the', 'is', 'are', 'am', 'i', 'you', 'we', 'they', 'he', 'she', 'it',
+      'to', 'of', 'for', 'in', 'on', 'at', 'with', 'and', 'or', 'but', 'do', 'does',
+      'did', 'can', 'could', 'would', 'should', 'please', 'what', 'which', 'who', 'whom',
+      'this', 'that', 'these', 'those', 'me', 'my', 'our', 'your', 'their',
+    ]);
+    const normalizedQuery = query.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+    const queryWords = Array.from(new Set(
+      normalizedQuery
+        .split(/\s+/)
+        .map((w) => w.trim())
+        .filter((w) => w.length > 2 && !stopWords.has(w))
+    ));
+
     const scored = embeddings.map((e) => {
       const lower = e.content.toLowerCase();
-      const score = queryWords.reduce((s, word) => s + (lower.includes(word) ? 1 : 0), 0);
+      let score = 0;
+      for (const word of queryWords) {
+        if (!lower.includes(word)) continue;
+        const occurrences = Math.min(3, lower.split(word).length - 1);
+        score += occurrences;
+      }
+
+      if (normalizedQuery.includes('service') && /\bservices?\b/.test(lower)) score += 2;
+      if (normalizedQuery.includes('hour') && /\bhours?\b/.test(lower)) score += 2;
+      if (normalizedQuery.includes('price') && /\b(price|pricing|cost|fee)\b/.test(lower)) score += 2;
+
       return { content: e.content, score };
     });
 
     scored.sort((a, b) => b.score - a.score);
-    const relevant = scored.slice(0, maxChunks).filter((s) => s.score > 0);
+    const relevant = scored
+      .slice(0, maxChunks)
+      .filter((s) => (queryWords.length === 0 ? true : s.score > 0));
 
     if (relevant.length === 0) {
-      // Return first few chunks as general context
       return embeddings.slice(0, maxChunks).map((e) => e.content).join('\n\n');
     }
 

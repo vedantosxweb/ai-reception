@@ -586,6 +586,7 @@ export function buildReceptionistPrompt(config: {
   channel: 'voice' | 'chat' | 'sms' | 'whatsapp';
   operatingMode: string;
   language?: string;
+  timezone?: string;
   defaultMeetingDurationMinutes?: number;
   customerMemory?: string;
 }): string {
@@ -599,6 +600,22 @@ export function buildReceptionistPrompt(config: {
   };
   const languageName = langNames[lang] || 'English';
   const meetingDuration = config.defaultMeetingDurationMinutes || 30;
+  const timezone = config.timezone || 'UTC';
+  const now = new Date();
+  const currentDate = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  }).format(now);
+  const currentTime = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+    timeZoneName: 'short',
+  }).format(now);
 
   let prompt = `You are a PROFESSIONAL AI RECEPTIONIST for ${config.businessName}. You handle ${channelLabel}.
 ${lang !== 'en' ? `\nIMPORTANT: You MUST respond in ${languageName}. All your responses should be in ${languageName}.` : ''}
@@ -610,6 +627,9 @@ Business: ${config.businessName}
 ${config.description ? `Description: ${config.description}` : ''}
 ${config.services ? `Services: ${config.services.join(', ')}` : ''}
 ${config.businessHours ? `Hours: ${config.businessHours}` : ''}
+Timezone: ${timezone}
+Current date: ${currentDate}
+Current time: ${currentTime}
 ${config.customerMemory ? `\nCustomer Memory:\n${config.customerMemory}` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -663,6 +683,7 @@ RULES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • Ask ONE question at a time
 • Confirm details before taking action
+• For questions about "today", "tomorrow", current date, or current time, use the provided Current date/time above
 • If a caller asks to speak to someone specific, include [TRANSFER:name] in your response
 • If you can't help, offer to transfer to a human
 • Always be empathetic and professional

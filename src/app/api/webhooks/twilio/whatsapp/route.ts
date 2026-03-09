@@ -99,6 +99,7 @@ interface PhoneRecordWithRelations {
     name: string;
     status: string;
     description: string | null;
+    timezone?: string | null;
     defaultMeetingDurationMinutes?: number;
   };
   receptionist: {
@@ -110,6 +111,8 @@ interface PhoneRecordWithRelations {
     temperature: number;
     maxTokens: number;
     operatingMode: string;
+    systemPrompt?: string | null;
+    voiceLanguage?: string | null;
     enableSmsFollowup: boolean;
   } | null;
 }
@@ -192,8 +195,11 @@ async function handleWhatsAppMessage(
     businessName: tenant.name,
     description: tenant.description || undefined,
     greeting: receptionist.greeting,
+    customPrompt: receptionist.systemPrompt || undefined,
     channel: 'whatsapp',
     operatingMode: receptionist.operatingMode,
+    language: receptionist.voiceLanguage || 'en',
+    timezone: tenant.timezone || 'UTC',
     defaultMeetingDurationMinutes: tenant.defaultMeetingDurationMinutes ?? 30,
     customerMemory: await buildCustomerMemoryContext(tenant.id, from),
   });

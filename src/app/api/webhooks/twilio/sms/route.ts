@@ -131,8 +131,11 @@ export async function POST(req: NextRequest) {
       businessName: tenant.name,
       description: tenant.description || undefined,
       greeting: receptionist.greeting,
+      customPrompt: receptionist.systemPrompt || undefined,
       channel: 'sms',
       operatingMode: receptionist.operatingMode,
+      language: receptionist.voiceLanguage || 'en',
+      timezone: tenant.timezone || 'UTC',
       defaultMeetingDurationMinutes: (tenant as { defaultMeetingDurationMinutes?: number }).defaultMeetingDurationMinutes ?? 30,
       customerMemory: await buildCustomerMemoryContext(tenant.id, from),
     });
