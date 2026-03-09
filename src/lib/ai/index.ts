@@ -192,6 +192,90 @@ function getFallbackProviders(primary: string): LLMProvider[] {
   return fallbacks;
 }
 
+function dedupeStrings(items: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of items) {
+    const item = raw.trim();
+    if (!item) continue;
+    const key = item.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(item);
+  }
+  return out;
+}
+
+function extractServiceCandidates(knowledgeContext: string): string[] {
+  const rawLines = knowledgeContext
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^[-*]\s*/, '').trim())
+    .filter(Boolean);
+
+  const bannedExact = new Set([
+    'services',
+    'company overview',
+    'pricing',
+    'working process',
+    'support',
+    'typical clients',
+    'contact',
+    'faq',
+    'frequently asked questions',
+  ]);
+
+  const candidates: string[] = [];
+
+  for (const line of rawLines) {
+    const lower = line.toLowerCase();
+    if (bannedExact.has(lower)) continue;
+    if (line.length < 4 || line.length > 90) continue;
+    if (/^(source:|q:|a:|company:|about:|email:|website:|phone:|location:)/i.test(line)) continue;
+    if (/^\$?\d+/.test(line)) continue;
+
+    // Prefer clear service-style labels
+    if (/\b(web|website|saas|ai|automation|development|app|application|bot|assistant|integration|consulting|support)\b/i.test(line)) {
+      candidates.push(line);
+      continue;
+    }
+
+    // Accept short title-like lines as a fallback.
+    if (/^[A-Z][A-Za-z0-9/&+\- ]+$/.test(line) && line.split(/\s+/).length <= 6) {
+      candidates.push(line);
+    }
+  }
+
+  return dedupeStrings(candidates).slice(0, 6);
+}
+
+function buildEmptyModelFallback(
+  userMessage: string,
+  knowledgeContext?: string
+): string {
+  const lower = userMessage.toLowerCase();
+
+  if (knowledgeContext && /\b(service|services|offer|provide|what do you do)\b/.test(lower)) {
+    const services = extractServiceCandidates(knowledgeContext);
+    if (services.length > 0) {
+      if (services.length === 1) {
+        return `We provide ${services[0]}. Would you like more details on this service?`;
+      }
+      if (services.length === 2) {
+        return `We provide ${services[0]} and ${services[1]}. Which one would you like to explore?`;
+      }
+      const head = services.slice(0, -1).join(', ');
+      const tail = services[services.length - 1];
+      return `We provide ${head}, and ${tail}. Which service are you interested in?`;
+    }
+  }
+
+  if (knowledgeContext && /\b(price|pricing|cost|fee|quote)\b/.test(lower)) {
+    return 'Pricing depends on project scope. I can share typical ranges if you tell me which service you need.';
+  }
+
+  return 'I am sorry, I had a temporary response issue. Please resend your message once.';
+}
+
 // =============================================================================
 // Session Store (Redis-backed)
 // =============================================================================
@@ -335,7 +419,10 @@ GUARDRAILS (MUST FOLLOW):
       throw lastProviderError || new Error('All LLM providers failed');
     }
 
-    const responseText = result.text || 'I apologize, could you please repeat that?';
+    let responseText = (result.text || '').trim();
+    if (!responseText) {
+      responseText = buildEmptyModelFallback(userMessage, config.knowledgeContext);
+    }
 
     // Extract availability check request [CHECK_AVAILABILITY:date=YYYY-MM-DD|time=HH:MM]
     const availCheckMatch = responseText.match(/\[CHECK_AVAILABILITY:([^\]]+)\]/);
