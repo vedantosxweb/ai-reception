@@ -6,6 +6,79 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireSession } from '@/lib/api-auth';
 import { BillingService } from '@/lib/billing/creem.service';
+import { convertCurrencyAmount } from '@/lib/fx/rates';
+
+interface PricingRule {
+  service: string;
+  price: number;
+  currency: string;
+}
+
+function normalizeServiceName(value: string): string {
+  return value.toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+function parsePricingCatalog(raw: unknown, defaultCurrency: string): PricingRule[] {
+  if (!Array.isArray(raw)) return [];
+
+  return raw
+    .map((item) => ({
+      service: typeof item?.service === 'string' ? item.service.trim() : '',
+      price: typeof item?.price === 'number' && Number.isFinite(item.price) ? item.price : NaN,
+      currency: typeof item?.currency === 'string' ? item.currency.trim().toUpperCase() : defaultCurrency,
+    }))
+    .filter((item) => item.service.length > 0 && item.price >= 0 && /^[A-Z]{3}$/.test(item.currency))
+    .slice(0, 100);
+}
+
+function extractAppointmentService(title?: string | null, notes?: string | null): string | null {
+  if (notes) {
+    const notesMatch = notes.match(/service\s*:\s*(.+)/i);
+    if (notesMatch?.[1]) {
+      return notesMatch[1].trim();
+    }
+  }
+
+  if (title) {
+    // Expected title shape from booking flow: "Appointment: Name - Service"
+    const titleMatch = title.match(/-\s*([^-\n]+)$/);
+    if (titleMatch?.[1]) {
+      return titleMatch[1].trim();
+    }
+  }
+
+  return null;
+}
+
+async function getAppointmentRevenue(
+  appointment: { title: string; notes: string | null },
+  pricingRules: PricingRule[],
+  defaultValue: number,
+  revenueCurrency: string
+): Promise<number> {
+  const service = extractAppointmentService(appointment.title, appointment.notes);
+  if (!service) return defaultValue;
+
+  const normalized = normalizeServiceName(service);
+  const exact = pricingRules.find((r) => normalizeServiceName(r.service) === normalized);
+  if (exact) {
+    const converted = await convertCurrencyAmount(exact.price, exact.currency, revenueCurrency);
+    if (converted !== null) return converted;
+    return exact.currency === revenueCurrency ? exact.price : defaultValue;
+  }
+
+  const fuzzy = pricingRules.find((r) => {
+    const ruleName = normalizeServiceName(r.service);
+    return normalized.includes(ruleName) || ruleName.includes(normalized);
+  });
+  if (fuzzy) {
+    const converted = await convertCurrencyAmount(fuzzy.price, fuzzy.currency, revenueCurrency);
+    if (converted !== null) return converted;
+    return fuzzy.currency === revenueCurrency ? fuzzy.price : defaultValue;
+  }
+
+  return defaultValue;
+}
 
 export async function GET(req: NextRequest) {
   const { session, error } = await requireSession();
@@ -28,6 +101,8 @@ export async function GET(req: NextRequest) {
       outboundCalls,
       totalTransfers,
       totalSMS,
+      appointmentsForRevenue,
+      tenantRevenueSettings,
       leadsCaptured,
       avgDuration,
       sentimentCounts,
@@ -43,6 +118,14 @@ export async function GET(req: NextRequest) {
       db.call.count({ where: { tenantId, direction: 'OUTBOUND', startedAt: { gte: startDate } } }),
       db.transfer.count({ where: { tenantId, createdAt: { gte: startDate } } }),
       db.sMSMessage.count({ where: { tenantId, createdAt: { gte: startDate } } }),
+      db.appointment.findMany({
+        where: { tenantId, createdAt: { gte: startDate } },
+        select: { title: true, notes: true },
+      }),
+      db.tenant.findUnique({
+        where: { id: tenantId },
+        select: { defaultAppointmentValue: true, revenueCurrency: true, pricingCatalog: true },
+      }),
       db.contact.count({ where: { tenantId, createdAt: { gte: startDate } } }),
       db.call.aggregate({
         where: { tenantId, status: 'COMPLETED', startedAt: { gte: startDate } },
@@ -168,12 +251,26 @@ export async function GET(req: NextRequest) {
     });
 
     // Conversion tracking: bookings from appointments vs total calls
-    const totalAppointments = await db.appointment.count({
-      where: { tenantId, createdAt: { gte: startDate } },
-    });
+    const totalAppointments = appointmentsForRevenue.length;
     const bookingRate = totalCalls > 0 ? Math.round((totalAppointments / totalCalls) * 100) : 0;
-    const avgAppointmentValue = Number(process.env.AVERAGE_APPOINTMENT_VALUE || '200');
-    const revenueGenerated = Math.round(totalAppointments * (isNaN(avgAppointmentValue) ? 200 : avgAppointmentValue));
+    const envFallbackValue = Number(process.env.AVERAGE_APPOINTMENT_VALUE || '200');
+    const defaultAppointmentValue =
+      typeof tenantRevenueSettings?.defaultAppointmentValue === 'number' && Number.isFinite(tenantRevenueSettings.defaultAppointmentValue)
+        ? tenantRevenueSettings.defaultAppointmentValue
+        : (isNaN(envFallbackValue) ? 200 : envFallbackValue);
+    const revenueCurrency =
+      typeof tenantRevenueSettings?.revenueCurrency === 'string' && tenantRevenueSettings.revenueCurrency.trim()
+        ? tenantRevenueSettings.revenueCurrency.trim().toUpperCase()
+        : 'USD';
+    const pricingRules = parsePricingCatalog(tenantRevenueSettings?.pricingCatalog, revenueCurrency);
+    const appointmentRevenues = await Promise.all(
+      appointmentsForRevenue.map((appt) =>
+        getAppointmentRevenue(appt, pricingRules, defaultAppointmentValue, revenueCurrency)
+      )
+    );
+    const revenueGenerated = Math.round(
+      appointmentRevenues.reduce((sum, value) => sum + value, 0)
+    );
 
     // Resolution rate trend (daily)
     const resolutionTrendMap = new Map<string, { completed: number; total: number }>();
@@ -239,6 +336,7 @@ export async function GET(req: NextRequest) {
           appointmentsBooked: totalAppointments,
           leadsCaptured,
           revenueGenerated,
+          revenueCurrency,
           missedCallsRecovered,
           highValueLeads,
           avgCallDuration: Math.round(avgDuration._avg.duration || 0),

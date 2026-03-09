@@ -79,6 +79,8 @@ const envSchema = z.object({
   ENABLE_SMS: z.enum(['true', 'false']).default('true'),
   ENABLE_WHATSAPP: z.string().default('false'),
   AVERAGE_APPOINTMENT_VALUE: z.string().optional(),
+  FX_API_URL: z.string().optional(),
+  FX_CACHE_TTL_MINUTES: z.string().optional(),
 
   // Security
   ENCRYPTION_KEY: z.string().optional(),

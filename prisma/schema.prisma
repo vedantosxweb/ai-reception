@@ -46,6 +46,9 @@ model Tenant {
   defaultMeetingDurationMinutes Int @default(30)
   meetingBufferMinutes          Int @default(0)
   slotStepMinutes               Int @default(15)
+  revenueCurrency               String @default("USD")
+  defaultAppointmentValue       Float @default(200)
+  pricingCatalog                Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

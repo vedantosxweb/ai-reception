@@ -30,12 +30,37 @@ export default function AnalyticsPanel() {
   if (loading) return <div className="h-64 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin" /></div>;
   if (!data) return null;
 
-  const summary = data.summary as Record<string, number>;
+  const summary = data.summary as {
+    totalCalls: number;
+    completedCalls: number;
+    appointmentsBooked: number;
+    leadsCaptured: number;
+    revenueGenerated: number;
+    revenueCurrency?: string;
+    missedCallsRecovered: number;
+    highValueLeads: number;
+    totalTransfers: number;
+    totalSMS: number;
+    inboundCalls: number;
+    outboundCalls: number;
+    resolutionRate: number;
+    transferRate: number;
+  };
   const topIntents = (data.topIntents as Array<{ intent: string; count: number; percentage: number }>) || [];
   const callVolume = (data.callVolume as Array<{ date: string; inbound: number; outbound: number }>) || [];
   const sentimentBreakdown = data.sentimentBreakdown as Record<string, number> || {};
-  const revenueDisplay = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 })
-    .format(summary.revenueGenerated || 0);
+  const revenueDisplay = (() => {
+    const code = (summary.revenueCurrency || 'USD').toUpperCase();
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: code,
+        maximumFractionDigits: 0,
+      }).format(summary.revenueGenerated || 0);
+    } catch {
+      return `$${(summary.revenueGenerated || 0).toLocaleString()}`;
+    }
+  })();
 
   // New advanced analytics
   const sentimentTrend = (data.sentimentTrend as Array<{ date: string; POSITIVE: number; NEUTRAL: number; NEGATIVE: number }>) || [];

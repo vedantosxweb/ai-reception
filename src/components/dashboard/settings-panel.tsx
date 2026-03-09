@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import {
   Save, Loader2, Building2, Clock3, Globe, CalendarOff, Plus, Trash2,
-  Timer, ChevronRight,
+  Timer, ChevronRight, TrendingUp,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -253,6 +253,16 @@ const INDUSTRIES = [
   'Education', 'Hospitality', 'Construction', 'Consulting', 'Other',
 ];
 
+const CURRENCIES = [
+  { value: 'USD', label: 'US Dollar (USD)' },
+  { value: 'INR', label: 'Indian Rupee (INR)' },
+  { value: 'EUR', label: 'Euro (EUR)' },
+  { value: 'GBP', label: 'British Pound (GBP)' },
+  { value: 'AED', label: 'UAE Dirham (AED)' },
+  { value: 'AUD', label: 'Australian Dollar (AUD)' },
+  { value: 'CAD', label: 'Canadian Dollar (CAD)' },
+];
+
 interface AvailabilityExceptionRow {
   id: string;
   dayOfWeek: number;
@@ -272,6 +282,9 @@ interface TenantData {
   defaultMeetingDurationMinutes: number;
   meetingBufferMinutes: number;
   slotStepMinutes: number;
+  revenueCurrency: string;
+  defaultAppointmentValue: number;
+  pricingCatalog: Array<{ service: string; price: number; currency: string }>;
   businessHours: Array<{
     dayOfWeek: number;
     openTime: string;
@@ -301,6 +314,23 @@ export default function SettingsPanel() {
           return;
         }
         const t = tenantRes.data;
+        const baseRevenueCurrency =
+          typeof t.revenueCurrency === 'string' && t.revenueCurrency.trim()
+            ? t.revenueCurrency.toUpperCase()
+            : 'USD';
+        const pricingCatalog: Array<{ service: string; price: number; currency: string }> = Array.isArray(t.pricingCatalog)
+          ? t.pricingCatalog
+              .map((item: { service?: unknown; price?: unknown }) => ({
+                service: typeof item?.service === 'string' ? item.service : '',
+                price: typeof item?.price === 'number' && Number.isFinite(item.price) ? item.price : 0,
+                currency:
+                  typeof (item as { currency?: unknown })?.currency === 'string' &&
+                  /^[A-Z]{3}$/.test(((item as { currency?: string }).currency || '').trim().toUpperCase())
+                    ? ((item as { currency?: string }).currency || '').trim().toUpperCase()
+                    : baseRevenueCurrency,
+              }))
+              .filter((item: { service: string; price: number; currency: string }) => item.service.trim().length > 0)
+          : [];
         const exceptions: AvailabilityExceptionRow[] =
           exRes.success && exRes.data
             ? exRes.data.map(
@@ -336,6 +366,15 @@ export default function SettingsPanel() {
             typeof t.meetingBufferMinutes === 'number' ? t.meetingBufferMinutes : 0,
           slotStepMinutes:
             typeof t.slotStepMinutes === 'number' ? t.slotStepMinutes : 15,
+          revenueCurrency:
+            typeof t.revenueCurrency === 'string' && t.revenueCurrency.trim()
+              ? t.revenueCurrency.toUpperCase()
+              : 'USD',
+          defaultAppointmentValue:
+            typeof t.defaultAppointmentValue === 'number' && Number.isFinite(t.defaultAppointmentValue)
+              ? t.defaultAppointmentValue
+              : 200,
+          pricingCatalog,
           businessHours:
             t.businessHours?.length > 0
               ? t.businessHours
@@ -369,6 +408,15 @@ export default function SettingsPanel() {
           defaultMeetingDurationMinutes: data.defaultMeetingDurationMinutes,
           meetingBufferMinutes: data.meetingBufferMinutes,
           slotStepMinutes: data.slotStepMinutes,
+          revenueCurrency: data.revenueCurrency,
+          defaultAppointmentValue: data.defaultAppointmentValue,
+          pricingCatalog: data.pricingCatalog
+            .map((p) => ({
+              service: p.service.trim(),
+              price: Number(p.price),
+              currency: (p.currency || data.revenueCurrency || 'USD').trim().toUpperCase(),
+            }))
+            .filter((p) => p.service && Number.isFinite(p.price) && p.price >= 0 && /^[A-Z]{3}$/.test(p.currency)),
           businessHours: data.businessHours,
         }),
       });
@@ -520,6 +568,152 @@ export default function SettingsPanel() {
                 placeholder="America/New_York"
               />
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Revenue Settings */}
+      <Card className="border-0 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" /> Revenue Settings
+          </CardTitle>
+          <CardDescription>
+            Configure how dashboard revenue is calculated from booked appointments.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <Label>Revenue Currency</Label>
+              <Select
+                value={data.revenueCurrency}
+                onValueChange={(v) => setData({ ...data, revenueCurrency: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CURRENCIES.map((c) => (
+                    <SelectItem key={c.value} value={c.value}>
+                      {c.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Default Appointment Value</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={Number.isFinite(data.defaultAppointmentValue) ? data.defaultAppointmentValue : 0}
+                onChange={(e) =>
+                  setData({
+                    ...data,
+                    defaultAppointmentValue: Math.max(0, Number(e.target.value) || 0),
+                  })
+                }
+              />
+              <p className="text-xs text-slate-500 mt-1">
+                Used when a booked service does not match any product-specific pricing.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <Label>Product/Service Pricing</Label>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  setData({
+                    ...data,
+                    pricingCatalog: [
+                      ...data.pricingCatalog,
+                      { service: '', price: 0, currency: data.revenueCurrency || 'USD' },
+                    ],
+                  })
+                }
+              >
+                <Plus className="w-4 h-4 mr-1" /> Add Pricing Row
+              </Button>
+            </div>
+
+            {data.pricingCatalog.length === 0 && (
+              <p className="text-sm text-slate-500">
+                No product-specific pricing yet. Add rows to map service names to prices.
+              </p>
+            )}
+
+            {data.pricingCatalog.map((row, idx) => (
+              <div key={`${idx}-${row.service}`} className="grid grid-cols-1 md:grid-cols-[1fr_140px_160px_auto] gap-2 items-end">
+                <div>
+                  <Label className="text-xs">Service Name</Label>
+                  <Input
+                    value={row.service}
+                    onChange={(e) => {
+                      const next = [...data.pricingCatalog];
+                      next[idx] = { ...next[idx], service: e.target.value };
+                      setData({ ...data, pricingCatalog: next });
+                    }}
+                    placeholder="e.g. Discovery Call"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Price</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={Number.isFinite(row.price) ? row.price : 0}
+                    onChange={(e) => {
+                      const next = [...data.pricingCatalog];
+                      next[idx] = { ...next[idx], price: Math.max(0, Number(e.target.value) || 0) };
+                      setData({ ...data, pricingCatalog: next });
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Currency</Label>
+                  <Select
+                    value={row.currency || data.revenueCurrency || 'USD'}
+                    onValueChange={(v) => {
+                      const next = [...data.pricingCatalog];
+                      next[idx] = { ...next[idx], currency: v };
+                      setData({ ...data, pricingCatalog: next });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CURRENCIES.map((c) => (
+                        <SelectItem key={c.value} value={c.value}>
+                          {c.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  onClick={() =>
+                    setData({
+                      ...data,
+                      pricingCatalog: data.pricingCatalog.filter((_, i) => i !== idx),
+                    })
+                  }
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            ))}
           </div>
         </CardContent>
       </Card>

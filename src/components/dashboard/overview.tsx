@@ -19,6 +19,7 @@ interface AnalyticsData {
     appointmentsBooked: number;
     leadsCaptured: number;
     revenueGenerated: number;
+    revenueCurrency?: string;
     missedCallsRecovered: number;
     highValueLeads: number;
     avgCallDuration: number;
@@ -46,6 +47,19 @@ interface AnalyticsData {
     overageMinutes: number;
     totalCalls: number;
   } | null;
+}
+
+function formatMoney(value: number, currency?: string): string {
+  const code = (currency || 'USD').toUpperCase();
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: code,
+      maximumFractionDigits: 0,
+    }).format(value || 0);
+  } catch {
+    return `$${(value || 0).toLocaleString()}`;
+  }
 }
 
 export default function OverviewPanel({ tenantId }: { tenantId: string }) {
@@ -83,7 +97,12 @@ export default function OverviewPanel({ tenantId }: { tenantId: string }) {
 
   const cards = [
     { title: 'Total Calls', value: data.summary.totalCalls, icon: Phone, color: 'from-blue-500 to-indigo-500' },
-    { title: 'Revenue Generated', value: `$${(data.summary.revenueGenerated || 0).toLocaleString()}`, icon: TrendingUp, color: 'from-emerald-500 to-teal-500' },
+    {
+      title: 'Revenue Generated',
+      value: formatMoney(data.summary.revenueGenerated || 0, data.summary.revenueCurrency),
+      icon: TrendingUp,
+      color: 'from-emerald-500 to-teal-500',
+    },
     { title: 'Appointments Booked', value: data.summary.appointmentsBooked, icon: Bot, color: 'from-cyan-500 to-blue-500' },
     { title: 'Missed Calls Recovered', value: data.summary.missedCallsRecovered, icon: Clock, color: 'from-orange-500 to-amber-500' },
   ];

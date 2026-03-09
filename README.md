@@ -193,7 +193,9 @@ npm run dev
 | `ENABLE_SMS` | `true` | Set to `false` to disable SMS webhook handling |
 | `TWILIO_WEBHOOK_STRICT_VALIDATION` | `true` in production, `false` in non-production | Override to force strict/non-strict signature validation |
 | `ENCRYPTION_KEY` | unset | Required for encrypted-at-rest integration credentials (`openssl rand -hex 32`) |
-| `AVERAGE_APPOINTMENT_VALUE` | `200` | Used for estimated revenue KPI in analytics |
+| `AVERAGE_APPOINTMENT_VALUE` | `200` | Legacy fallback for revenue KPI when tenant-level settings are not set |
+| `FX_API_URL` | `https://api.frankfurter.app/latest` | FX API endpoint used for cross-currency revenue conversion |
+| `FX_CACHE_TTL_MINUTES` | `360` | Cache TTL for exchange rates in minutes |
 
 ### API Endpoints
 

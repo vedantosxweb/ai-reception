@@ -47,8 +47,36 @@ export async function PATCH(req: NextRequest) {
       defaultMeetingDurationMinutes,
       meetingBufferMinutes,
       slotStepMinutes,
+      revenueCurrency,
+      defaultAppointmentValue,
+      pricingCatalog,
       businessHours, // Array of { dayOfWeek, openTime, closeTime, isOpen }
     } = body;
+
+    const normalizedRevenueCurrency =
+      typeof revenueCurrency === 'string' ? revenueCurrency.trim().toUpperCase() : undefined;
+    const fallbackPricingCurrency =
+      normalizedRevenueCurrency && /^[A-Z]{3}$/.test(normalizedRevenueCurrency)
+        ? normalizedRevenueCurrency
+        : 'USD';
+    const normalizedPricingCatalog = Array.isArray(pricingCatalog)
+      ? pricingCatalog
+          .map((item) => ({
+            service: typeof item?.service === 'string' ? item.service.trim() : '',
+            price: typeof item?.price === 'number' && Number.isFinite(item.price) ? item.price : NaN,
+            currency:
+              typeof item?.currency === 'string' && /^[A-Z]{3}$/.test(item.currency.trim().toUpperCase())
+                ? item.currency.trim().toUpperCase()
+                : fallbackPricingCurrency,
+          }))
+          .filter((item) =>
+            item.service.length > 0 &&
+            item.service.length <= 120 &&
+            item.price >= 0 &&
+            /^[A-Z]{3}$/.test(item.currency)
+          )
+          .slice(0, 100)
+      : undefined;
 
     const updated = await db.tenant.update({
       where: { id: session.user.tenantId },
@@ -66,6 +94,13 @@ export async function PATCH(req: NextRequest) {
           ? { meetingBufferMinutes } : {}),
         ...(typeof slotStepMinutes === 'number' && [5, 10, 15, 30, 60].includes(slotStepMinutes)
           ? { slotStepMinutes } : {}),
+        ...(normalizedRevenueCurrency && /^[A-Z]{3}$/.test(normalizedRevenueCurrency)
+          ? { revenueCurrency: normalizedRevenueCurrency } : {}),
+        ...(typeof defaultAppointmentValue === 'number' && Number.isFinite(defaultAppointmentValue) && defaultAppointmentValue >= 0 && defaultAppointmentValue <= 10000000
+          ? { defaultAppointmentValue } : {}),
+        ...(normalizedPricingCatalog !== undefined
+          ? { pricingCatalog: normalizedPricingCatalog }
+          : {}),
       },
     });
 
