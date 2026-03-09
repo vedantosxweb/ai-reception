@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { requireOwnerOrAdmin } from '@/lib/api-auth';
 import { BillingService } from '@/lib/billing/creem.service';
 import { db } from '@/lib/db';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireOwnerOrAdmin();
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     const url = await BillingService.createPortalSession(
       session.user.tenantId,
-      returnUrl || `${process.env.NEXT_PUBLIC_APP_URL}/dashboard`
+      returnUrl || `${getAppBaseUrl()}/dashboard`
     );
 
     if (!url) {

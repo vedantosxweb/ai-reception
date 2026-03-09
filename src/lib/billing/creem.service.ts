@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { PLAN_CONFIG, type PlanKey } from '@/lib/config/env';
 import type { PlanTier } from '@prisma/client';
 import { log } from '@/lib/logger';
+import { getAppBaseUrl } from '@/lib/app-url';
 
 // ---------------------------------------------------------------------------
 // Creem API helpers
@@ -116,7 +117,7 @@ export class BillingService {
     });
     if (!tenant) throw new Error('Tenant not found');
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = getAppBaseUrl();
 
     const checkout = await creemFetch<CreemCheckout>('/checkouts', {
       method: 'POST',
@@ -155,7 +156,7 @@ export class BillingService {
     });
     if (!tenant) throw new Error('Tenant not found');
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
+    const appUrl = getAppBaseUrl();
 
     const checkout = await creemFetch<CreemCheckout>('/checkouts', {
       method: 'POST',
