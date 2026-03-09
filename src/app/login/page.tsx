@@ -30,21 +30,27 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
 
-    const result = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-      callbackUrl: '/dashboard',
-    });
+    try {
+      const result = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: '/dashboard',
+      });
 
-    setLoading(false);
-    if (!result || result.error) {
-      setError('Invalid email or password.');
-      return;
+      if (!result || result.error) {
+        setError('Invalid email or password.');
+        return;
+      }
+
+      router.replace(result.url || '/dashboard');
+      router.refresh();
+    } catch (err) {
+      console.error('[Login] Sign in failed:', err);
+      setError('Sign in failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
-
-    router.replace(result.url || '/dashboard');
-    router.refresh();
   };
 
   return (

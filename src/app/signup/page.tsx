@@ -44,36 +44,41 @@ export default function SignUpPage() {
     }
 
     setLoading(true);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, password, companyName, website }),
+      });
+      const raw = await res.text();
+      const data = raw ? (JSON.parse(raw) as { error?: string }) : {};
 
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, email, password, companyName, website }),
-    });
-    const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || 'Failed to create account.');
+        return;
+      }
 
-    if (!res.ok) {
+      // Auto sign in
+      const signInRes = await signIn('credentials', {
+        email,
+        password,
+        redirect: false,
+        callbackUrl: '/onboarding',
+      });
+
+      if (!signInRes || signInRes.error) {
+        setError('Account created. Please sign in manually.');
+        return;
+      }
+
+      router.replace('/onboarding');
+      router.refresh();
+    } catch (err) {
+      console.error('[Signup] Registration failed:', err);
+      setError('Something went wrong. Please try again.');
+    } finally {
       setLoading(false);
-      setError(data.error || 'Failed to create account.');
-      return;
     }
-
-    // Auto sign in
-    const signInRes = await signIn('credentials', {
-      email,
-      password,
-      redirect: false,
-      callbackUrl: '/onboarding',
-    });
-    setLoading(false);
-
-    if (!signInRes || signInRes.error) {
-      setError('Account created. Please sign in manually.');
-      return;
-    }
-
-    router.replace('/onboarding');
-    router.refresh();
   };
 
   return (
