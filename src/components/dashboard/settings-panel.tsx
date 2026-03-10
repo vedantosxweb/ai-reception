@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 import {
   Save, Loader2, Building2, Clock3, Globe, CalendarOff, Plus, Trash2,
@@ -302,6 +303,7 @@ export default function SettingsPanel() {
   const [data, setData] = useState<TenantData | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const router = useRouter();
 
   useEffect(() => {
     Promise.all([
@@ -423,6 +425,8 @@ export default function SettingsPanel() {
       const json = await res.json();
       if (json.success) {
         toast.success('Settings saved successfully!');
+        // Refresh server data so sidebar shows updated company name
+        router.refresh();
       } else {
         toast.error(json.error || 'Failed to save settings.');
       }
