@@ -1,10 +1,10 @@
 // =============================================================================
-// API Auth Middleware - Extracts session with tenant context
+// API Auth Middleware - Clerk-based session extraction with tenant context
 // =============================================================================
 
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
+import { auth, currentUser } from '@clerk/nextjs/server';
+import { db } from '@/lib/db';
 import type { UserRole } from '@prisma/client';
 import { checkRateLimitRedis } from '@/lib/redis';
 
@@ -26,15 +26,57 @@ type RequireSessionResult =
   | { session: null; error: NextResponse };
 
 export async function requireSession(): Promise<RequireSessionResult> {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id || !session.user.tenantId) {
+  const { userId } = await auth();
+
+  if (!userId) {
     return {
       session: null,
       error: NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 }),
     };
   }
 
-  return { session: session as AuthenticatedSession, error: null };
+  // Look up local user by Clerk ID (stored in externalId field or matched by email)
+  const clerkUser = await currentUser();
+  const email = clerkUser?.emailAddresses?.[0]?.emailAddress;
+
+  if (!email) {
+    return {
+      session: null,
+      error: NextResponse.json({ success: false, error: 'No email associated with account' }, { status: 401 }),
+    };
+  }
+
+  const dbUser = await db.user.findFirst({
+    where: { email },
+    include: {
+      tenant: {
+        select: { id: true, name: true, slug: true, plan: true },
+      },
+    },
+  });
+
+  if (!dbUser || !dbUser.tenant) {
+    return {
+      session: null,
+      error: NextResponse.json({ success: false, error: 'User not found. Please complete onboarding.' }, { status: 403 }),
+    };
+  }
+
+  return {
+    session: {
+      user: {
+        id: dbUser.id,
+        email: dbUser.email,
+        name: dbUser.name,
+        role: dbUser.role,
+        tenantId: dbUser.tenant.id,
+        tenantSlug: dbUser.tenant.slug,
+        tenantName: dbUser.tenant.name,
+        plan: dbUser.tenant.plan,
+      },
+    },
+    error: null,
+  };
 }
 
 export async function requireRole(...roles: UserRole[]): Promise<RequireSessionResult> {

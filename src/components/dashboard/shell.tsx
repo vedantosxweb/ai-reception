@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTheme } from 'next-themes';
-import { signOut } from 'next-auth/react';
+import { useClerk } from '@clerk/nextjs';
 import { toast } from 'sonner';
 import dynamic from 'next/dynamic';
 import {
@@ -75,6 +75,7 @@ export default function DashboardShell({ user }: { user: DashboardUser }) {
   const { theme, setTheme } = useTheme();
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { signOut } = useClerk();
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -99,7 +100,7 @@ export default function DashboardShell({ user }: { user: DashboardUser }) {
   }, [searchParams, router]);
 
   const handleLogout = async () => {
-    await signOut({ callbackUrl: '/login' });
+    await signOut({ redirectUrl: '/' });
   };
 
   const renderContent = () => {
