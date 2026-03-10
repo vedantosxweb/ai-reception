@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import Providers from "@/components/providers";
+import { ClerkProvider, SignInButton, SignUpButton, Show, UserButton } from "@clerk/nextjs";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -42,11 +43,23 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        <Providers>
-          {children}
-          <SonnerToaster position="top-center" richColors />
-        </Providers>
+        <ClerkProvider>
+          <header className="flex justify-end items-center gap-3 p-4">
+            <Show when="signed-out">
+              <SignInButton />
+              <SignUpButton />
+            </Show>
+            <Show when="signed-in">
+              <UserButton />
+            </Show>
+          </header>
+          <Providers>
+            {children}
+            <SonnerToaster position="top-center" richColors />
+          </Providers>
+        </ClerkProvider>
       </body>
     </html>
   );
 }
+

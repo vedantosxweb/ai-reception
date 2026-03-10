@@ -27,6 +27,7 @@
     "health": "curl -s http://localhost:${PORT:-3000}/api/v1/health | node -e 'process.stdin.resume();let d=\"\";process.stdin.on(\"data\",c=>d+=c);process.stdin.on(\"end\",()=>{const j=JSON.parse(d);console.log(j.data.status===\"healthy\"?\"✓ Healthy\":\"✗ Unhealthy\");process.exit(j.data.status===\"healthy\"?0:1)})'"
   },
   "dependencies": {
+    "@clerk/nextjs": "^7.0.2",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
