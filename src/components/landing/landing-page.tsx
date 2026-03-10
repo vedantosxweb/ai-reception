@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { SignInButton, SignUpButton } from '@clerk/nextjs';
 import {
   Phone,
   MessageSquare,
@@ -237,14 +238,14 @@ function Navbar() {
 
           {/* Desktop CTA */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" asChild>
-              <Link href="/login">Log In</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/signup">
+            <SignInButton>
+              <Button variant="ghost">Log In</Button>
+            </SignInButton>
+            <SignUpButton>
+              <Button>
                 Get Started <ArrowRight className="w-4 h-4" />
-              </Link>
-            </Button>
+              </Button>
+            </SignUpButton>
           </div>
 
           {/* Mobile toggle */}
@@ -269,12 +270,12 @@ function Navbar() {
               FAQ
             </a>
             <div className="flex gap-3 pt-2">
-              <Button variant="outline" asChild className="flex-1">
-                <Link href="/login">Log In</Link>
-              </Button>
-              <Button asChild className="flex-1">
-                <Link href="/signup">Get Started</Link>
-              </Button>
+              <SignInButton>
+                <Button variant="outline" className="flex-1">Log In</Button>
+              </SignInButton>
+              <SignUpButton>
+                <Button className="flex-1">Get Started</Button>
+              </SignUpButton>
             </div>
           </div>
         )}
@@ -305,11 +306,11 @@ function Hero() {
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button size="lg" asChild className="text-base px-8 h-12">
-            <Link href="/signup">
+          <SignUpButton>
+            <Button size="lg" className="text-base px-8 h-12">
               Start Free Trial <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Button>
+            </Button>
+          </SignUpButton>
           <Button size="lg" variant="outline" asChild className="text-base px-8 h-12">
             <a href="#how-it-works">See How It Works</a>
           </Button>
@@ -439,13 +440,14 @@ function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <Button
-                  className="w-full mt-6"
-                  variant={p.highlighted ? 'default' : 'outline'}
-                  asChild
-                >
-                  <Link href="/signup">{p.cta}</Link>
-                </Button>
+                <SignUpButton>
+                  <Button
+                    className="w-full mt-6"
+                    variant={p.highlighted ? 'default' : 'outline'}
+                  >
+                    {p.cta}
+                  </Button>
+                </SignUpButton>
               </CardContent>
             </Card>
           ))}
@@ -511,16 +513,15 @@ function Cta() {
           Join businesses that never miss a call. Set up your AI receptionist in under 15 minutes.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Button
-            size="lg"
-            variant="secondary"
-            asChild
-            className="text-base px-8 h-12"
-          >
-            <Link href="/signup">
+          <SignUpButton>
+            <Button
+              size="lg"
+              variant="secondary"
+              className="text-base px-8 h-12"
+            >
               Get Started Free <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Button>
+            </Button>
+          </SignUpButton>
         </div>
       </div>
     </section>
