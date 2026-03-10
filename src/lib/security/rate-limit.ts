@@ -1,53 +1,12 @@
 // =============================================================================
-// Rate Limiting — In-memory + Redis-backed limiter for API routes
+// Rate Limiting — Redis-backed limiter for API routes (delegates to redis.ts)
 // =============================================================================
 
 import { NextResponse } from 'next/server';
 import { checkRateLimitRedis } from '@/lib/redis';
 
 // ---------------------------------------------------------------------------
-// In-memory fallback (for development or when Redis is unavailable)
-// ---------------------------------------------------------------------------
-
-interface RateLimitEntry {
-  count: number;
-  resetAt: number;
-}
-
-const memoryStore = new Map<string, RateLimitEntry>();
-const CLEANUP_INTERVAL = 60_000; // 1 minute
-
-// Periodic cleanup of expired entries
-if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of memoryStore) {
-      if (entry.resetAt <= now) memoryStore.delete(key);
-    }
-  }, CLEANUP_INTERVAL);
-}
-
-function checkMemoryRateLimit(
-  key: string,
-  maxRequests: number,
-  windowSeconds: number
-): { allowed: boolean; remaining: number; resetAt: number } {
-  const now = Date.now();
-  const entry = memoryStore.get(key);
-
-  if (!entry || entry.resetAt <= now) {
-    // New window
-    memoryStore.set(key, { count: 1, resetAt: now + windowSeconds * 1000 });
-    return { allowed: true, remaining: maxRequests - 1, resetAt: now + windowSeconds * 1000 };
-  }
-
-  entry.count++;
-  const remaining = Math.max(0, maxRequests - entry.count);
-  return { allowed: entry.count <= maxRequests, remaining, resetAt: entry.resetAt };
-}
-
-// ---------------------------------------------------------------------------
-// Unified rate limit check (Redis → memory fallback)
+// Unified rate limit check (delegates to redis.ts which has in-memory fallback)
 // ---------------------------------------------------------------------------
 
 export async function checkRateLimit(
@@ -55,13 +14,7 @@ export async function checkRateLimit(
   maxRequests: number = 60,
   windowSeconds: number = 60
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  try {
-    // Try Redis first
-    return await checkRateLimitRedis(key, maxRequests, windowSeconds);
-  } catch {
-    // Fallback to in-memory
-    return checkMemoryRateLimit(key, maxRequests, windowSeconds);
-  }
+  return checkRateLimitRedis(key, maxRequests, windowSeconds);
 }
 
 // ---------------------------------------------------------------------------

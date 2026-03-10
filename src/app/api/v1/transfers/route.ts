@@ -111,10 +111,10 @@ export async function PATCH(req: NextRequest) {
     }
 
     // Only allow updating specific fields
-    const allowedFields = ['name', 'triggerType', 'triggerValue', 'targetType', 'targetValue', 'priority', 'isActive'];
+    const allowedFields = ['name', 'triggerType', 'triggerValue', 'targetType', 'targetValue', 'priority', 'isActive'] as const;
     const sanitized: Record<string, unknown> = {};
     for (const key of allowedFields) {
-      if (key in updateData) sanitized[key] = updateData[key];
+      if (key in updateData) sanitized[key] = (updateData as Record<string, unknown>)[key];
     }
 
     const updated = await db.transferRule.update({ where: { id }, data: sanitized });

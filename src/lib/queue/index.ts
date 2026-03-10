@@ -71,7 +71,9 @@ const DEFAULT_JOB_OPTIONS: JobsOptions = {
 
 /**
  * Add a job to a queue. Returns false if Redis is unavailable (job not queued).
- * Callers should handle the fallback case (e.g., process synchronously).
+ * IMPORTANT: On serverless platforms like Vercel, background workers don't run.
+ * When this returns false, callers MUST handle the task synchronously or
+ * schedule it via an alternative mechanism (e.g., Vercel Cron, Edge Functions).
  */
 export async function addJob<T extends Record<string, unknown>>(
   queueName: QueueName,

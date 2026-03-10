@@ -36,10 +36,12 @@ export async function GET() {
   const allHealthy = checks.database.status === 'healthy';
 
   return NextResponse.json({
-    status: allHealthy ? 'healthy' : 'degraded',
-    version: process.env.npm_package_version || '1.0.0',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    checks,
+    data: {
+      status: allHealthy ? 'healthy' : 'degraded',
+      version: process.env.npm_package_version || '1.0.0',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      checks,
+    },
   }, { status: allHealthy ? 200 : 503 });
 }

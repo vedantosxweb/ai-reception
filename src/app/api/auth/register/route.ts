@@ -5,11 +5,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { checkRateLimitRedis } from '@/lib/redis';
 import { registerTenantOwner } from '@/lib/services/registration.service';
+import { log } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
     // Rate limit: 10 registrations per hour per IP
-    const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+    const forwarded = req.headers.get('x-forwarded-for');
+    const ip = forwarded?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown';
     const rl = await checkRateLimitRedis(`register:${ip}`, 10, 3600);
     if (!rl.allowed) {
       return NextResponse.json(
@@ -33,7 +35,7 @@ export async function POST(req: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    console.error('[Register] Error:', error);
+    log.auth.error({ error }, 'Registration failed');
     return NextResponse.json({ success: false, error: 'Failed to create account. Please try again.' }, { status: 500 });
   }
 }

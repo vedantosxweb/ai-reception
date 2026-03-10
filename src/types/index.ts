@@ -2,7 +2,7 @@
 // Shared TypeScript Types
 // =============================================================================
 
-import type { PlanTier, UserRole, Sentiment } from '@prisma/client';
+import type { UserRole, Sentiment } from '@prisma/client';
 
 // API Response wrapper
 export interface ApiResponse<T = unknown> {
@@ -25,7 +25,7 @@ export interface SessionUser {
   role: UserRole;
   tenantId: string;
   tenantSlug: string;
-  plan: PlanTier;
+  plan: string;
 }
 
 export interface JWTPayload {

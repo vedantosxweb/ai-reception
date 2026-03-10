@@ -7,6 +7,7 @@ import { requireSession, requireOwnerOrAdmin } from '@/lib/api-auth';
 import { BillingService } from '@/lib/billing/creem.service';
 import { PLAN_CONFIG } from '@/lib/config/env';
 import { db } from '@/lib/db';
+import { log } from '@/lib/logger';
 import type { PlanTier } from '@prisma/client';
 
 // GET /api/v1/billing - Get billing info & usage
@@ -54,7 +55,7 @@ export async function GET() {
       },
     });
   } catch (err) {
-    console.error('[Billing] Error:', err);
+    log.billing.error({ error: err }, 'Failed to load billing info');
     return NextResponse.json({ success: false, error: 'Failed to load billing' }, { status: 500 });
   }
 }
@@ -118,7 +119,7 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
     }
   } catch (err) {
-    console.error('[Billing] Error:', err);
+    log.billing.error({ error: err }, 'Billing operation failed');
     return NextResponse.json({ success: false, error: 'Billing operation failed' }, { status: 500 });
   }
 }

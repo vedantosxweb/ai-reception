@@ -96,21 +96,26 @@ let _env: EnvConfig | null = null;
 export function getEnv(): EnvConfig {
   if (_env) return _env;
 
+  // Skip validation during Docker builds or when explicitly requested
+  if (process.env.SKIP_ENV_VALIDATION === '1' || process.env.SKIP_ENV_VALIDATION === 'true') {
+    _env = process.env as unknown as EnvConfig;
+    return _env;
+  }
+
   const parsed = envSchema.safeParse(process.env);
   if (!parsed.success) {
     const formatted = parsed.error.issues.map(
       (i) => `  ${i.path.join('.')}: ${i.message}`
     ).join('\n');
     console.error(`Environment validation failed:\n${formatted}`);
-    // In production, throw. In dev, use defaults for optional fields.
+    // In production, throw. In dev, fall back to raw process.env.
     if (process.env.NODE_ENV === 'production') {
       throw new Error(`Missing required environment variables:\n${formatted}`);
     }
   }
 
-  _env = (parsed.success ? parsed.data : envSchema.parse({
-    ...process.env,
-  })) as EnvConfig;
+  // Use validated data if successful, otherwise fall back to raw env in dev
+  _env = (parsed.success ? parsed.data : process.env as unknown as EnvConfig);
   return _env;
 }
 

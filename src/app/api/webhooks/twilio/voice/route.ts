@@ -110,9 +110,12 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
     );
   }
 
-  // Check business hours with proper time comparison
+  // Check business hours with proper time comparison using tenant timezone
+  const tenantTz = tenant.timezone || 'America/New_York';
   const now = new Date();
-  const dayOfWeek = now.getDay();
+  // Convert server time to tenant's local time
+  const tenantNow = new Date(now.toLocaleString('en-US', { timeZone: tenantTz }));
+  const dayOfWeek = tenantNow.getDay();
   const businessHour = await db.businessHour.findFirst({
     where: { tenantId: tenant.id, dayOfWeek },
   });
@@ -122,8 +125,8 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
     if (!businessHour.isOpen) {
       isOpen = false;
     } else if (businessHour.openTime && businessHour.closeTime) {
-      // Parse HH:MM format and compare against current time
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      // Parse HH:MM format and compare against current time in tenant's timezone
+      const currentMinutes = tenantNow.getHours() * 60 + tenantNow.getMinutes();
       const [openH, openM] = businessHour.openTime.split(':').map(Number);
       const [closeH, closeM] = businessHour.closeTime.split(':').map(Number);
       const openMinutes = openH * 60 + (openM || 0);
@@ -462,12 +465,14 @@ async function handleUserInput(callSid: string, from: string, input: string) {
 
     try {
       const { CalendarService } = await import('@/lib/services/calendar.service');
-      const checkDate = new Date(`${date}T${time}:00`);
-      const tenant = await db.tenant.findUnique({
+      const availTenant = await db.tenant.findUnique({
         where: { id: session.tenantId },
-        select: { defaultMeetingDurationMinutes: true, meetingBufferMinutes: true, slotStepMinutes: true },
+        select: { defaultMeetingDurationMinutes: true, meetingBufferMinutes: true, slotStepMinutes: true, timezone: true },
       });
-      const durationMin = tenant?.defaultMeetingDurationMinutes ?? 30;
+      // Parse date/time in tenant's timezone context
+      const tenantTimezone = availTenant?.timezone || tenant?.timezone || 'UTC';
+      const checkDate = new Date(`${date}T${time}:00`);
+      const durationMin = availTenant?.defaultMeetingDurationMinutes ?? 30;
       const requestedEnd = new Date(checkDate.getTime() + durationMin * 60 * 1000);
 
       // Check if requested slot conflicts with existing appointments
@@ -826,10 +831,4 @@ function twimlResponse(twiml: string): NextResponse {
   });
 }
 
-export async function GET() {
-  return NextResponse.json({
-    status: 'ok',
-    service: 'voice-webhook',
-    twilioConfigured: !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN),
-  });
-}
+

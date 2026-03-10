@@ -30,9 +30,9 @@ FROM base AS worker
 WORKDIR /app
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma/
-RUN npm ci --production=false
-COPY . .
-RUN npx prisma generate
+RUN npm ci --omit=dev && npx prisma generate
+COPY src/lib ./src/lib
+COPY tsconfig.json ./
 ENV NODE_ENV=production
 CMD ["npx", "tsx", "src/lib/queue/workers.ts"]
 

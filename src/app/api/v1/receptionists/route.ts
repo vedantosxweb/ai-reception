@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
+import { log } from '@/lib/logger';
 import { requireSession, requireOwnerOrAdmin } from '@/lib/api-auth';
 import { TenantService } from '@/lib/services/tenant.service';
 import {
@@ -119,7 +120,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: receptionist }, { status: 201 });
   } catch (err) {
-    console.error('[Receptionists] Create error:', err);
+    log.api.error({ error: err }, 'Failed to create receptionist');
     return NextResponse.json({ success: false, error: 'Failed to create receptionist' }, { status: 500 });
   }
 }
@@ -167,7 +168,7 @@ export async function PATCH(req: NextRequest) {
 
     return NextResponse.json({ success: true, data: updated });
   } catch (err) {
-    console.error('[Receptionists] Update error:', err);
+    log.api.error({ error: err }, 'Failed to update receptionist');
     return NextResponse.json({ success: false, error: 'Failed to update receptionist' }, { status: 500 });
   }
 }

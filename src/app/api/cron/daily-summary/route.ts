@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { buildAndSendDailySummary } from '@/lib/email/email.service';
+import { log } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60; // Allow up to 60s for processing all tenants
@@ -17,7 +18,11 @@ export async function GET(req: NextRequest) {
   const authHeader = req.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET || process.env.HOST_PROVISION_SECRET;
 
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (!cronSecret) {
+    return NextResponse.json({ error: 'Cron secret not configured' }, { status: 500 });
+  }
+
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
@@ -40,7 +45,7 @@ export async function GET(req: NextRequest) {
       } catch (error) {
         skipped++;
         errors.push(`${tenant.name}: ${(error as Error).message}`);
-        console.error(`[Daily Summary] Error for tenant ${tenant.id}:`, error);
+        log.api.error({ error, tenantId: tenant.id }, 'Daily summary failed for tenant');
       }
     }
 
@@ -52,7 +57,7 @@ export async function GET(req: NextRequest) {
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
-    console.error('[Daily Summary Cron] Error:', error);
+    log.api.error({ error }, 'Daily summary cron job failed');
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

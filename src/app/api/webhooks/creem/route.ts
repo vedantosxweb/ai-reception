@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { BillingService } from '@/lib/billing/creem.service';
+import { log } from '@/lib/logger';
 
 export async function POST(req: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
 
     // Verify HMAC-SHA256 signature
     if (!BillingService.verifyWebhookSignature(rawBody, signature)) {
-      console.error('[Creem Webhook] Signature verification failed');
+      log.webhook.warn('Creem webhook signature verification failed');
       return NextResponse.json(
         { error: 'Invalid signature' },
         { status: 401 },
@@ -33,7 +34,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (err) {
-    console.error('[Creem Webhook] Error:', err);
+    log.webhook.error({ error: err }, 'Creem webhook processing failed');
     return NextResponse.json(
       { error: 'Webhook processing failed' },
       { status: 500 },

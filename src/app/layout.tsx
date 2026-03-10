@@ -1,10 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as SonnerToaster } from "@/components/ui/sonner";
 import Providers from "@/components/providers";
-import { ErrorBoundary } from "@/components/error-boundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "AI Receptionist - Never Miss a Call Again",
     description: "Deploy an AI receptionist that answers calls, responds to texts, and handles customer inquiries 24/7.",
-    url: "https://ai-receptionist-saas-flame.vercel.app",
+    url: process.env.NEXT_PUBLIC_APP_URL || "https://ai-receptionist-saas-flame.vercel.app",
     siteName: "AI Receptionist",
     type: "website",
   },
@@ -45,10 +43,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <Providers>
-          <ErrorBoundary>
-            {children}
-          </ErrorBoundary>
-          <Toaster />
+          {children}
           <SonnerToaster position="top-center" richColors />
         </Providers>
       </body>

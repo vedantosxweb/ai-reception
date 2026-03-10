@@ -69,3 +69,39 @@ export async function GET(req: NextRequest) {
     meta: { page, limit, total },
   });
 }
+
+// DELETE /api/v1/calls - Delete a call record (GDPR compliance)
+export async function DELETE(req: NextRequest) {
+  const { session, error } = await requireOwnerOrAdmin();
+  if (error) return error;
+
+  const { searchParams } = new URL(req.url);
+  const id = searchParams.get('id');
+
+  if (!id) {
+    return NextResponse.json({ success: false, error: 'Call ID required' }, { status: 400 });
+  }
+
+  const existing = await db.call.findFirst({
+    where: { id, tenantId: session.user.tenantId },
+  });
+
+  if (!existing) {
+    return NextResponse.json({ success: false, error: 'Call not found' }, { status: 404 });
+  }
+
+  // Delete cascades to transcripts, call events, and transfers via schema
+  await db.call.delete({ where: { id } });
+
+  await db.auditLog.create({
+    data: {
+      tenantId: session.user.tenantId,
+      userId: session.user.id,
+      action: 'call.deleted',
+      resource: 'call',
+      resourceId: id,
+    },
+  });
+
+  return NextResponse.json({ success: true, message: 'Call record deleted' });
+}
