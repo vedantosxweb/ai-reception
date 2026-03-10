@@ -21,9 +21,14 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const data = Object.fromEntries(formData.entries()) as Record<string, string>;
 
-    const from = data.From || '';
-    const to = data.To || '';
+    const rawFrom = data.From || '';
+    const rawTo = data.To || '';
     const body = data.Body || '';
+
+    // WhatsApp messages come with 'whatsapp:' prefix — strip it for DB lookup
+    const isWhatsApp = rawFrom.startsWith('whatsapp:') || rawTo.startsWith('whatsapp:');
+    const from = rawFrom.replace('whatsapp:', '');
+    const to = rawTo.replace('whatsapp:', '');
 
     // Validate Twilio webhook signature
     if (shouldEnforceTwilioWebhookSignature()) {
@@ -48,7 +53,7 @@ export async function POST(req: NextRequest) {
       return twimlResponse('<Response></Response>');
     }
 
-    log.webhook.info({ from, to, bodyPreview: body.slice(0, 50) }, 'SMS webhook received');
+    log.webhook.info({ from, to, isWhatsApp, bodyPreview: body.slice(0, 50) }, 'SMS webhook received');
 
     // Look up phone number
     const phoneRecord = await db.phoneNumber.findUnique({
@@ -149,8 +154,10 @@ export async function POST(req: NextRequest) {
       knowledgeContext: knowledgeContext || undefined,
     });
 
-    // Send reply
-    const smsResult = await sendSMS(from, aiResponse.text, to);
+    // Send reply — use whatsapp: prefix for WhatsApp messages
+    const replyTo = isWhatsApp ? `whatsapp:${from}` : from;
+    const replyFrom = isWhatsApp ? `whatsapp:${to}` : to;
+    const smsResult = await sendSMS(replyTo, aiResponse.text, replyFrom);
 
     // Store outgoing message
     const outgoingExists = smsResult.messageSid
