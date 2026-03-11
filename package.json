@@ -5,10 +5,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000",
+    "test": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
     "build": "prisma generate && NODE_ENV=production next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/",
     "start": "NODE_ENV=production node .next/standalone/server.js",
     "start:prod": "NODE_ENV=production PORT=${PORT:-3000} node .next/standalone/server.js",
-    "lint": "tsc --noEmit",
+    "lint": "ESLINT_USE_FLAT_CONFIG=false eslint .",
     "typecheck": "tsc --noEmit",
     "prisma:validate": "prisma validate",
     "ci:check": "npm run prisma:validate && npm run typecheck && npm run build",
@@ -112,18 +115,23 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.4",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
     "@types/bcryptjs": "^2.4.6",
     "@types/cheerio": "^0.22.35",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
+    "@vitejs/plugin-react": "^5.1.4",
     "bun-types": "^1.3.4",
     "eslint": "^9",
     "eslint-config-next": "^16.1.1",
+    "jsdom": "^28.1.0",
     "tailwindcss": "^4",
     "tsx": "^4.20.6",
     "tw-animate-css": "^1.3.5",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
