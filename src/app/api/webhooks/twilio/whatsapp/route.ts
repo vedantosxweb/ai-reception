@@ -70,6 +70,7 @@ export async function POST(req: NextRequest) {
     });
 
     if (!phoneRecord?.tenant || !phoneRecord.receptionist) {
+      log.webhook.info({ to, rawTo }, 'No direct phone record with tenant/receptionist found, trying fallback');
       // Try matching with just the whatsapp number env var
       const whatsappNumber = process.env.TWILIO_WHATSAPP_NUMBER?.replace('whatsapp:', '');
       if (whatsappNumber) {
@@ -78,11 +79,18 @@ export async function POST(req: NextRequest) {
           include: { tenant: true, receptionist: true },
         });
         if (fallbackRecord?.tenant && fallbackRecord.receptionist) {
+          log.webhook.info({ whatsappNumber }, 'Found fallback phone record, processing message');
           return handleWhatsAppMessage(fallbackRecord, from, body, data.MessageSid);
+        } else {
+          log.webhook.warn({ whatsappNumber, hasFallback: !!fallbackRecord }, 'Fallback phone record found but missing tenant/receptionist');
         }
+      } else {
+        log.webhook.warn('No TWILIO_WHATSAPP_NUMBER env var set for fallback lookup');
       }
       return twimlResponse('<Response></Response>');
     }
+
+    log.webhook.info('Found phone record, routing to handler');
 
     return handleWhatsAppMessage(phoneRecord as PhoneRecordWithRelations, from, body, data.MessageSid);
   } catch (error) {
@@ -289,8 +297,11 @@ async function handleWhatsAppMessage(
   const receptionist = phoneRecord.receptionist;
 
   if (tenant.status === 'CANCELLED' || !receptionist || receptionist.status !== 'ACTIVE') {
+    log.webhook.warn({ tenantStatus: tenant.status, receptionistId: receptionist?.id, receptionistStatus: receptionist?.status }, 'Tenant or Receptionist is inactive/cancelled');
     return twimlResponse('<Response></Response>');
   }
+
+  log.webhook.info('Checking idempotency guard');
 
   // Idempotency guard for Twilio retries
   if (messageSid) {
@@ -303,9 +314,12 @@ async function handleWhatsAppMessage(
       select: { id: true },
     });
     if (existingInbound) {
+      log.webhook.info('Message already processed (idempotency guard caught)');
       return twimlResponse('<Response></Response>');
     }
   }
+
+  log.webhook.info('Finding or creating contact');
 
   // Find or create contact
   let contactId: string | undefined;
@@ -375,9 +389,11 @@ async function handleWhatsAppMessage(
     knowledgeContext: knowledgeContext || undefined,
   };
 
+  log.webhook.info('Generating AI Response');
   const aiResponse = await generateAIResponse(body, context, aiConfig);
 
   const cleanText = cleanAIText(aiResponse.text);
+  log.webhook.info({ cleanTextLength: cleanText.length }, 'AI response generated');
 
   // Handle booking completion — create appointment via CalendarService
   if (aiResponse.bookingComplete && aiResponse.text.match(/\[BOOKING:/)) {
