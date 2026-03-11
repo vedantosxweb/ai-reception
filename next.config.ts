@@ -3,6 +3,7 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   serverExternalPackages: ['bcryptjs', 'twilio', 'cheerio', 'openai', '@prisma/client', 'pino', 'pino-pretty', 'bullmq', 'ioredis'],
   async headers() {
     return [
