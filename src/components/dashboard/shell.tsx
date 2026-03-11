@@ -39,10 +39,11 @@ const ReceptionistsPanel = dynamic(() => import('@/components/dashboard/receptio
 const CallLogsPanel = dynamic(() => import('@/components/dashboard/call-logs'), { ssr: false });
 const KnowledgePanel = dynamic(() => import('@/components/dashboard/knowledge-panel'), { ssr: false });
 const BillingPanel = dynamic(() => import('@/components/dashboard/billing-panel'), { ssr: false });
-const SettingsPanel = dynamic(() => import('@/components/dashboard/settings-panel'), { ssr: false });
+const SettingPanel = dynamic(() => import('@/components/dashboard/settings-panel'), { ssr: false });
 const DirectoryPanel = dynamic(() => import('@/components/dashboard/directory-panel'), { ssr: false });
 const AnalyticsPanel = dynamic(() => import('@/components/dashboard/analytics-panel'), { ssr: false });
 const IntegrationsPanel = dynamic(() => import('@/components/dashboard/integrations-panel'), { ssr: false });
+const PhoneNumbersPanel = dynamic(() => import('@/components/dashboard/phone-numbers-panel'), { ssr: false });
 
 interface DashboardUser {
   id: string;
@@ -58,7 +59,8 @@ interface DashboardUser {
 const navItems = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'receptionists', label: 'AI Receptionists', icon: Bot },
-  { id: 'calls', label: 'Call Logs', icon: Phone },
+  { id: 'phone-numbers', label: 'Phone Numbers', icon: Phone },
+  { id: 'calls', label: 'Call Logs', icon: Headphones },
   { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
   { id: 'directory', label: 'Directory', icon: BookUser },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -107,13 +109,14 @@ export default function DashboardShell({ user }: { user: DashboardUser }) {
     switch (activeTab) {
       case 'overview': return <OverviewPanel tenantId={user.tenantId} />;
       case 'receptionists': return <ReceptionistsPanel tenantId={user.tenantId} />;
+      case 'phone-numbers': return <PhoneNumbersPanel tenantId={user.tenantId} />;
       case 'calls': return <CallLogsPanel tenantId={user.tenantId} />;
       case 'knowledge': return <KnowledgePanel tenantId={user.tenantId} />;
       case 'directory': return <DirectoryPanel />;
       case 'analytics': return <AnalyticsPanel />;
       case 'integrations': return <IntegrationsPanel />;
       case 'billing': return <BillingPanel plan={user.plan} />;
-      case 'settings': return <SettingsPanel />;
+      case 'settings': return <SettingPanel />;
       default: return <OverviewPanel tenantId={user.tenantId} />;
     }
   };
