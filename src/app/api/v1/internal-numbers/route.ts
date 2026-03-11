@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { requireSession } from '@/lib/api-auth';
+import { validateRequest } from '@/lib/security/validation';
 import { z } from 'zod';
 
 const createSchema = z.object({
@@ -16,11 +17,11 @@ export async function POST(req: NextRequest) {
     if (error) return error;
 
     const body = await req.json();
-    const result = createSchema.safeParse(body);
+    const result = validateRequest(createSchema, body);
 
     if (!result.success) {
       return NextResponse.json(
-        { success: false, error: result.error.errors[0]?.message || 'Invalid input' },
+        { success: false, error: result.error },
         { status: 400 }
       );
     }
