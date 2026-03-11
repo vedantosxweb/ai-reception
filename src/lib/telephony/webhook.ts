@@ -28,11 +28,10 @@ export function buildTwilioWebhookUrl(path: string, req?: NextRequest): string {
 }
 
 export function shouldEnforceTwilioWebhookSignature(): boolean {
-  if (process.env.NODE_ENV === 'production') return true;
   const explicit = process.env.TWILIO_WEBHOOK_STRICT_VALIDATION;
   if (explicit === 'true') return true;
   if (explicit === 'false') return false;
-  return false;
+  return process.env.NODE_ENV === 'production';
 }
 
 export function isSmsEnabled(): boolean {
