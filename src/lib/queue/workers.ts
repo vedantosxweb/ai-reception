@@ -12,6 +12,8 @@ import {
   type CallAnalysisJob,
   type EmailNotificationJob,
   type UsageAggregationJob,
+  type OutboundTaskJob,
+  type MasterSchedulerJob,
 } from './index';
 
 // ---------------------------------------------------------------------------
@@ -224,6 +226,114 @@ async function processUsageAggregation(job: Job<UsageAggregationJob>) {
 }
 
 // ---------------------------------------------------------------------------
+// Outbound Task Worker (AI-01, AI-02, AI-03)
+// ---------------------------------------------------------------------------
+
+async function processOutboundTask(job: Job<OutboundTaskJob>) {
+  const { tenantId, scheduledCallId } = job.data;
+  const { db } = await import('@/lib/db');
+  
+  log.telephony.info({ tenantId, scheduledCallId }, 'Processing outbound task');
+
+  const scheduledCall = await (db as any).scheduledCall.findUnique({
+    where: { id: scheduledCallId },
+    include: { contact: true, phoneNumber: true },
+  });
+
+  if (!scheduledCall || scheduledCall.status !== 'PENDING') return;
+
+  try {
+    // Mark as in progress
+    await (db as any).scheduledCall.update({
+      where: { id: scheduledCallId },
+      data: { status: 'IN_PROGRESS' },
+    });
+
+    const { type, metadata, contact, phoneNumber } = scheduledCall;
+    const meta = metadata as any;
+
+    if (type === 'SMS_SUMMARY') {
+      const { sendSms } = await import('@/lib/telephony/twilio.service');
+      await sendSms({
+        to: meta.to || contact?.phone,
+        body: meta.body,
+        tenantId,
+      });
+    } else if (type === 'FOLLOW_UP' || type === 'CALLBACK') {
+      const { initiateOutboundCall } = await import('@/lib/telephony/twilio.service');
+      // Trigger actual outbound call via Twilio
+      await initiateOutboundCall({
+        tenantId,
+        to: contact?.phone || meta.to,
+        from: phoneNumber?.number || meta.from,
+        receptionistId: meta.receptionistId,
+        message: meta.initialMessage,
+      });
+    }
+
+    // Mark as completed
+    await (db as any).scheduledCall.update({
+      where: { id: scheduledCallId },
+      data: { status: 'COMPLETED' },
+    });
+
+  } catch (error) {
+    const lastError = error instanceof Error ? error.message : 'Unknown error';
+    await (db as any).scheduledCall.update({
+      where: { id: scheduledCallId },
+      data: { 
+        status: 'FAILED',
+        lastError,
+        retryCount: { increment: 1 }
+      },
+    }).catch(console.error);
+    throw error;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Master Scheduler Worker (Periodically triggers other jobs)
+// ---------------------------------------------------------------------------
+
+async function processMasterScheduler(job: Job<MasterSchedulerJob>) {
+  const { type } = job.data;
+  const { db } = await import('@/lib/db');
+  const { enqueueEmailNotification } = await import('./index');
+
+  log.api.info({ type }, 'Processing master scheduler job');
+
+  if (type === 'daily-digest-trigger') {
+    const tenants = await db.tenant.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true },
+    });
+
+    for (const tenant of tenants) {
+      await enqueueEmailNotification({
+        type: 'daily_summary',
+        tenantId: tenant.id,
+        data: {},
+      });
+    }
+    log.api.info({ tenantCount: tenants.length }, 'Daily summaries enqueued for all tenants');
+  }
+
+  if (type === 'weekly-faq-trigger') {
+    const { FAQBuilderService } = await import('@/lib/ai/faq-builder');
+    const receptionists = await db.aIReceptionist.findMany({
+      select: { id: true, tenantId: true },
+    });
+
+    for (const r of receptionists) {
+      // Trigger FAQ analysis for each receptionist (per tenant)
+      await FAQBuilderService.suggestFAQs(r.tenantId)
+        .catch((err: Error) => log.api.error({ err: err.message, receptionistId: r.id }, 'Weekly FAQ generation failed'));
+    }
+    log.api.info({ receptionistCount: receptionists.length }, 'Weekly FAQ analysis complete');
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Start all workers
 // ---------------------------------------------------------------------------
 
@@ -254,12 +364,28 @@ export function startWorkers() {
     { connection, concurrency: 1 }
   );
 
+  const outboundWorker = new Worker(
+    QUEUE_NAMES.OUTBOUND_TASKS,
+    processOutboundTask,
+    { connection, concurrency: 5 }
+  );
+
   const workers = [
     { name: 'knowledge', worker: knowledgeWorker },
     { name: 'call-analysis', worker: callAnalysisWorker },
     { name: 'email', worker: emailWorker },
     { name: 'usage', worker: usageWorker },
+    { name: 'outbound', worker: outboundWorker },
+    {
+      name: 'master-scheduler',
+      worker: new Worker(QUEUE_NAMES.MASTER_SCHEDULER, processMasterScheduler, { connection, concurrency: 1 }),
+    },
   ];
+
+  // Setup periodic jobs
+  import('./index').then(({ setupPeriodicJobs }) => {
+    setupPeriodicJobs().catch((err) => log.api.error({ err }, 'Failed to setup periodic jobs'));
+  });
 
   for (const { name, worker } of workers) {
     worker.on('completed', (job) => {

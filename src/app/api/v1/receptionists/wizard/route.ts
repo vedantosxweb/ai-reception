@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
       llmProvider,
       llmModel,
       systemPrompt,
+      enableWelcomeSms,
+      knowledgeSourceIds,
     } = body;
 
     const tenantId = session.user.tenantId;
@@ -64,6 +66,7 @@ export async function POST(req: NextRequest) {
         greeting: greeting || 'Hello! Thank you for calling. How can I help you today?',
         systemPrompt,
         operatingMode: operatingMode || 'standard',
+        enableSmsFollowup: enableWelcomeSms ?? true,
       },
     });
 
@@ -100,7 +103,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Create directory entries
+    // 4. Link existing knowledge sources (manual uploads)
+    if (knowledgeSourceIds && Array.isArray(knowledgeSourceIds)) {
+      await db.knowledgeSource.updateMany({
+        where: { id: { in: knowledgeSourceIds }, tenantId },
+        data: { receptionistId: receptionist.id },
+      });
+    }
+
+    // 5. Create directory entries
     if (directory && Array.isArray(directory)) {
       for (const entry of directory) {
         await db.directoryEntry.create({

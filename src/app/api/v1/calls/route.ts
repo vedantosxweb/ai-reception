@@ -14,6 +14,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const page = parseInt(searchParams.get('page') || '1');
   const limit = Math.min(parseInt(searchParams.get('limit') || '50'), 100);
+  const q = searchParams.get('q');
   const receptionistId = searchParams.get('receptionistId');
   const status = searchParams.get('status');
   const direction = searchParams.get('direction');
@@ -41,12 +42,35 @@ export async function GET(req: NextRequest) {
   }
 
   // List calls
-  const where = {
+  const where: any = {
     tenantId: session.user.tenantId,
     ...(receptionistId ? { receptionistId } : {}),
     ...(status ? { status: status.toUpperCase() as 'COMPLETED' | 'FAILED' | 'IN_PROGRESS' } : {}),
     ...(direction ? { direction: direction.toUpperCase() as 'INBOUND' | 'OUTBOUND' } : {}),
   };
+
+  // Add search filter if provided
+  if (q) {
+    where.OR = [
+      { callerNumber: { contains: q, mode: 'insensitive' } },
+      { intent: { contains: q, mode: 'insensitive' } },
+      { 
+        transcripts: { 
+          some: { 
+            content: { contains: q, mode: 'insensitive' } 
+          } 
+        } 
+      },
+      {
+        contact: {
+          OR: [
+            { firstName: { contains: q, mode: 'insensitive' } },
+            { lastName: { contains: q, mode: 'insensitive' } },
+          ]
+        }
+      }
+    ];
+  }
 
   const [calls, total] = await Promise.all([
     db.call.findMany({

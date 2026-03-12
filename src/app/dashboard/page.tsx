@@ -91,6 +91,15 @@ export default async function DashboardPage() {
     };
   }
 
+  // Check if onboarding is needed
+  const receptionistCount = await db.aIReceptionist.count({
+    where: { tenantId: dbUser.tenant!.id }
+  });
+
+  if (receptionistCount === 0) {
+    redirect('/onboarding');
+  }
+
   return (
     <Suspense
       fallback={

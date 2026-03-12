@@ -68,6 +68,7 @@ model Tenant {
   messages               SMSMessage[]
   usageRecords           UsageRecord[]
   auditLogs              AuditLog[]
+  leads                  Lead[]
   contacts               Contact[]
   appointments           Appointment[]
   businessHours          BusinessHour[]
@@ -77,6 +78,8 @@ model Tenant {
   conversations          Conversation[]
   conversationMessages   ConversationMessage[]
   integrations           Integration[]
+  blocklist              Blocklist[]
+  scheduledCalls         ScheduledCall[]
 
   @@index([billingCustomerId])
   @@index([slug])
@@ -253,6 +256,9 @@ model AIReceptionist {
   enableVoicemail       Boolean @default(true)
   enableEmergencyDetect Boolean @default(true)
   neverSendToVoicemail  Boolean @default(false)
+  enableMissedCallFollowup Boolean @default(false)
+  missedCallFollowupDelay Int     @default(600) // seconds
+  smsSummaryTemplate    String?
   maxCallDuration       Int     @default(600) // seconds
   silenceTimeout        Int     @default(10) // seconds
   operatingMode         String  @default("standard") // standard, medical, legal
@@ -289,15 +295,19 @@ model PhoneNumber {
   number         String            @unique
   provider       String            @default("twilio") // twilio, telnyx
   providerSid    String?
+  status         PhoneNumberStatus @default(ACTIVE)
   friendlyName   String?
   capabilities   String            @default("voice,sms") // voice, sms, mms
-  status         PhoneNumberStatus @default(ACTIVE)
+  customGreeting String?
+  isVip          Boolean           @default(false)
+  dndBypass      Boolean           @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   calls       Call[]
   smsMessages SMSMessage[]
+  scheduledCalls ScheduledCall[]
 
   @@index([tenantId])
   @@index([number])
@@ -419,8 +429,10 @@ model Call {
   callEvents  CallEvent[]
   transcripts Transcript[]
   transfers   Transfer[]
+  lead        Lead?
 
   @@index([tenantId])
+  @@index([tenantId, startedAt(sort: Desc)])
   @@index([receptionistId])
   @@index([providerCallSid])
   @@index([callerNumber])
@@ -632,6 +644,7 @@ model Contact {
   notes            String?
   hubspotContactId String? // HubSpot CRM contact ID
   lastContactAt    DateTime?
+  isVip            Boolean           @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -640,6 +653,7 @@ model Contact {
   smsMessages   SMSMessage[]
   appointments  Appointment[]
   conversations Conversation[]
+  scheduledCalls ScheduledCall[]
 
   @@index([tenantId])
   @@index([phone])
@@ -842,4 +856,92 @@ model EmailVerificationToken {
 
   @@index([token])
   @@index([userId])
+}
+model Lead {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callId    String?  @unique
+  call      Call?    @relation(fields: [callId], references: [id], onDelete: SetNull)
+  name      String?
+  email     String?
+  phone     String?
+  intent    String?
+  status    LeadStatus @default(NEW)
+  source    String?    @default("voice") // voice, sms, whatsapp
+  details   Json?
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([phone])
+}
+
+model Blocklist {
+  id        String   @id @default(cuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  number    String
+  reason    String?
+  source    String   @default("manual") // manual, auto_spam, community
+  
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, number])
+  @@index([tenantId])
+}
+
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  QUALIFIED
+  UNQUALIFIED
+  CONVERTED
+}
+
+// =============================================================================
+// OUTBOUND & SCHEDULING
+// =============================================================================
+
+model ScheduledCall {
+  id             String              @id @default(cuid())
+  tenantId       String
+  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  contactId      String?
+  contact        Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  phoneNumberId  String?
+  phoneNumber    PhoneNumber?        @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  
+  scheduledTime  DateTime
+  type           ScheduledCallType
+  status         ScheduledCallStatus @default(PENDING)
+  
+  metadata       Json?               // Includes template context, reason, etc.
+  retryCount     Int                 @default(0)
+  lastError      String?
+  
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([tenantId])
+  @@index([scheduledTime])
+  @@index([status])
+}
+
+enum ScheduledCallType {
+  CALLBACK
+  FOLLOW_UP
+  REMINDER
+  SMS_SUMMARY
+}
+
+enum ScheduledCallStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  CANCELLED
 }

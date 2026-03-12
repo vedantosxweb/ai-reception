@@ -69,6 +69,7 @@ export interface ConversationContext {
     transferTarget?: string;
     bookingData?: BookingData;
     leadScore?: number;
+    leadData?: Record<string, string>;
   };
 }
 
@@ -92,6 +93,7 @@ export interface AIResponse {
   bookingComplete: boolean;
   availabilityCheckRequest?: { date: string; time: string };
   leadScore: number;
+  leadData?: Record<string, string>;
   sendSms: boolean;
   smsContent?: string;
   tokenUsage?: {

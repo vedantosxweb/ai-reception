@@ -30,6 +30,11 @@ interface Receptionist {
   voiceLanguage: string;
   phoneNumbers: Array<{ id: string; number: string; status: string }>;
   _count: { calls: number; knowledgeSources: number };
+  metrics?: {
+    resolutionRate: number;
+    avgSentiment: number;
+    successRate: number;
+  };
   createdAt: string;
 }
 
@@ -278,6 +283,32 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
                 {r.phoneNumbers.length > 0 && (
                   <div className="text-xs text-slate-500">
                     Phone: {r.phoneNumbers.map((p) => p.number).join(', ')}
+                  </div>
+                )}
+
+                {r.metrics && (
+                  <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Resolution Rate</span>
+                      <span className="font-medium">{r.metrics.resolutionRate}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full">
+                      <div 
+                        className="bg-emerald-500 h-1.5 rounded-full" 
+                        style={{ width: `${r.metrics.resolutionRate}%` }}
+                      />
+                    </div>
+                    
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Avg Sentiment</span>
+                      <span className="font-medium">{r.metrics.avgSentiment}%</span>
+                    </div>
+                    <div className="w-full bg-slate-100 dark:bg-slate-800 h-1.5 rounded-full">
+                      <div 
+                        className="bg-teal-500 h-1.5 rounded-full" 
+                        style={{ width: `${r.metrics.avgSentiment}%` }}
+                      />
+                    </div>
                   </div>
                 )}
 

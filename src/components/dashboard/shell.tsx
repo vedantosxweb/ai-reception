@@ -44,6 +44,7 @@ const DirectoryPanel = dynamic(() => import('@/components/dashboard/directory-pa
 const AnalyticsPanel = dynamic(() => import('@/components/dashboard/analytics-panel'), { ssr: false });
 const IntegrationsPanel = dynamic(() => import('@/components/dashboard/integrations-panel'), { ssr: false });
 const PhoneNumbersPanel = dynamic(() => import('@/components/dashboard/phone-numbers-panel'), { ssr: false });
+const LeadsPanel = dynamic(() => import('@/components/dashboard/leads-panel'), { ssr: false });
 
 interface DashboardUser {
   id: string;
@@ -60,6 +61,7 @@ const navItems = [
   { id: 'overview', label: 'Overview', icon: LayoutDashboard },
   { id: 'receptionists', label: 'AI Receptionists', icon: Bot },
   { id: 'phone-numbers', label: 'Phone Numbers', icon: Phone },
+  { id: 'leads', label: 'Leads', icon: Users },
   { id: 'calls', label: 'Call Logs', icon: Headphones },
   { id: 'knowledge', label: 'Knowledge Base', icon: BookOpen },
   { id: 'directory', label: 'Directory', icon: BookUser },
@@ -110,6 +112,7 @@ export default function DashboardShell({ user }: { user: DashboardUser }) {
       case 'overview': return <OverviewPanel tenantId={user.tenantId} />;
       case 'receptionists': return <ReceptionistsPanel tenantId={user.tenantId} />;
       case 'phone-numbers': return <PhoneNumbersPanel tenantId={user.tenantId} />;
+      case 'leads': return <LeadsPanel tenantId={user.tenantId} />;
       case 'calls': return <CallLogsPanel tenantId={user.tenantId} />;
       case 'knowledge': return <KnowledgePanel tenantId={user.tenantId} />;
       case 'directory': return <DirectoryPanel />;

@@ -50,7 +50,7 @@ if (typeof setInterval !== 'undefined') {
 let _redis: Redis | null = null;
 let _redisAvailable: boolean | null = null;
 
-function getRedis(): Redis | null {
+export function getRedisClient(): Redis | null {
   if (_redisAvailable === false) return null;
 
   const url = process.env.REDIS_URL;
@@ -102,7 +102,7 @@ function getRedis(): Redis | null {
 
 // Generic get/set/del with automatic fallback
 async function redisGet(key: string): Promise<string | null> {
-  const client = getRedis();
+  const client = getRedisClient();
   if (!client || _redisAvailable === false) return memGet(key);
   try {
     return await client.get(key);
@@ -112,7 +112,7 @@ async function redisGet(key: string): Promise<string | null> {
 }
 
 async function redisSet(key: string, value: string, ttlSeconds?: number): Promise<void> {
-  const client = getRedis();
+  const client = getRedisClient();
   if (!client || _redisAvailable === false) {
     memSet(key, value, ttlSeconds);
     return;
@@ -131,7 +131,7 @@ async function redisSet(key: string, value: string, ttlSeconds?: number): Promis
 }
 
 async function redisDel(key: string): Promise<void> {
-  const client = getRedis();
+  const client = getRedisClient();
   memDel(key);
   if (!client || _redisAvailable === false) return;
   try {
@@ -154,6 +154,8 @@ export interface ActiveCallSession {
   phoneNumberId: string;
   callId: string;
   callerNumber: string;
+  dialedNumber: string;
+  contactId?: string;
   startedAt: string; // ISO string
   voiceLanguage?: string;
 }
@@ -227,7 +229,7 @@ export async function checkRateLimitRedis(
   maxRequests: number = 60,
   windowSeconds: number = 60
 ): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
-  const client = getRedis();
+  const client = getRedisClient();
   const now = Math.floor(Date.now() / 1000);
 
   if (!client || _redisAvailable === false) {

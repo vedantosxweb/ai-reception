@@ -39,6 +39,8 @@ export const QUEUE_NAMES = {
   CALL_ANALYSIS: 'call-analysis',
   EMAIL_NOTIFICATIONS: 'email-notifications',
   USAGE_AGGREGATION: 'usage-aggregation',
+  OUTBOUND_TASKS: 'outbound-tasks',
+  MASTER_SCHEDULER: 'master-scheduler',
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -126,6 +128,15 @@ export interface UsageAggregationJob {
   periodEnd: string;
 }
 
+export interface OutboundTaskJob {
+  tenantId: string;
+  scheduledCallId: string; // From the new ScheduledCall model
+}
+
+export interface MasterSchedulerJob {
+  type: 'daily-digest-trigger' | 'weekly-faq-trigger';
+}
+
 export async function enqueueKnowledgeProcessing(data: KnowledgeProcessingJob) {
   return addJob(QUEUE_NAMES.KNOWLEDGE_PROCESSING, 'process-knowledge', data as unknown as Record<string, unknown>);
 }
@@ -142,6 +153,47 @@ export async function enqueueEmailNotification(data: EmailNotificationJob) {
 
 export async function enqueueUsageAggregation(data: UsageAggregationJob) {
   return addJob(QUEUE_NAMES.USAGE_AGGREGATION, 'aggregate-usage', data as unknown as Record<string, unknown>);
+}
+
+export async function enqueueOutboundTask(data: OutboundTaskJob, delayMs?: number) {
+  return addJob(
+    QUEUE_NAMES.OUTBOUND_TASKS, 
+    'outbound-task', 
+    data as unknown as Record<string, unknown>,
+    { delay: delayMs }
+  );
+}
+
+/**
+ * Setup recurring jobs (runs once on worker startup)
+ */
+export async function setupPeriodicJobs() {
+  const queue = getQueue(QUEUE_NAMES.MASTER_SCHEDULER);
+  if (!queue) return;
+
+  // 1. Daily Digest Trigger (1:00 AM UTC every day)
+  await addJob(
+    QUEUE_NAMES.MASTER_SCHEDULER,
+    'daily-digest-trigger',
+    { type: 'daily-digest-trigger' },
+    {
+      repeat: { pattern: '0 1 * * *' }, // 1 AM every day
+      jobId: 'daily-digest-trigger', // Ensure only one exists
+    }
+  );
+
+  // 2. Weekly FAQ Trigger (2:00 AM UTC every Monday)
+  await addJob(
+    QUEUE_NAMES.MASTER_SCHEDULER,
+    'weekly-faq-trigger',
+    { type: 'weekly-faq-trigger' },
+    {
+      repeat: { pattern: '0 2 * * 1' }, // 2 AM every Monday
+      jobId: 'weekly-faq-trigger',
+    }
+  );
+
+  log.api.info('Periodic jobs scheduled');
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,7 @@ import { generateAIResponse, getOrCreateSession, buildReceptionistPrompt } from 
 import { buildCustomerMemoryContext } from '@/lib/ai/memory';
 import { KnowledgeBaseService } from '@/lib/knowledge/knowledge.service';
 import { BillingService } from '@/lib/billing/creem.service';
+import { HubSpotService } from '@/lib/services/hubspot.service';
 import {
   buildGreetingTwiML,
   buildResponseTwiML,
@@ -25,6 +26,7 @@ import {
   setAISession,
   type ActiveCallSession,
 } from '@/lib/redis';
+import { enqueueOutboundTask } from '@/lib/queue';
 import type { BookingData } from '@/types';
 
 export async function POST(req: NextRequest) {
@@ -104,41 +106,38 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
   const tenant = phoneRecord.tenant;
   const receptionist = phoneRecord.receptionist;
 
+  // AI-07: Spam Filtering (Blocklist & Community Mock)
+  const isBlocked = await (db as any).blocklist.findFirst({
+    where: { tenantId: tenant.id, number: from },
+  });
+
+  if (isBlocked) {
+    log.webhook.info({ callSid, from, tenantId: tenant.id }, 'Call rejected: Caller is in blocklist');
+    return twimlResponse(
+      '<Response><Say voice="Polly.Joanna">I\'m sorry, your number has been restricted from calling this business. Goodbye.</Say><Reject/></Response>'
+    );
+  }
+
+  // Mock community spam check
+  if (from.startsWith('+1888') || from.includes('000000')) {
+    log.webhook.info({ callSid, from, tenantId: tenant.id }, 'Call rejected: Community spam detected');
+    return twimlResponse('<Response><Reject reason="busy"/></Response>');
+  }
+
   if (!receptionist || receptionist.status !== 'ACTIVE') {
     return twimlResponse(
       '<Response><Say voice="Polly.Joanna">Thank you for calling. We are currently unable to take calls. Please try again later.</Say><Hangup/></Response>'
     );
   }
 
-  // Check business hours with proper time comparison using tenant timezone
-  const tenantTz = tenant.timezone || 'America/New_York';
-  const now = new Date();
-  // Convert server time to tenant's local time
-  const tenantNow = new Date(now.toLocaleString('en-US', { timeZone: tenantTz }));
-  const dayOfWeek = tenantNow.getDay();
-  const businessHour = await db.businessHour.findFirst({
-    where: { tenantId: tenant.id, dayOfWeek },
-  });
-
-  let isOpen = true; // Default to open if no hours configured
-  if (businessHour) {
-    if (!businessHour.isOpen) {
-      isOpen = false;
-    } else if (businessHour.openTime && businessHour.closeTime) {
-      // Parse HH:MM format and compare against current time in tenant's timezone
-      const currentMinutes = tenantNow.getHours() * 60 + tenantNow.getMinutes();
-      const [openH, openM] = businessHour.openTime.split(':').map(Number);
-      const [closeH, closeM] = businessHour.closeTime.split(':').map(Number);
-      const openMinutes = openH * 60 + (openM || 0);
-      const closeMinutes = closeH * 60 + (closeM || 0);
-      isOpen = currentMinutes >= openMinutes && currentMinutes < closeMinutes;
-    }
-  }
-
   // Create contact if not exists
   let contactId: string | undefined;
+  let contactIsVip = false;
   try {
-    let contact = await db.contact.findFirst({ where: { tenantId: tenant.id, phone: from } });
+    let contact = await db.contact.findFirst({
+    where: { tenantId: tenant.id, phone: from },
+  }) as any;
+  contactIsVip = contact?.isVip || false;
     if (!contact) {
       contact = await db.contact.create({
         data: {
@@ -158,6 +157,38 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
   } catch (err) {
     log.webhook.error({ error: err, callSid }, 'Voice contact creation error');
   }
+
+  // Check business hours with proper time comparison using tenant timezone
+  const tenantTz = tenant.timezone || 'America/New_York';
+  const now = new Date();
+  const tenantNow = new Date(now.toLocaleString('en-US', { timeZone: tenantTz }));
+  const dayOfWeek = tenantNow.getDay();
+  
+  let isOpen = true; // Default to open if no hours configured
+
+  // CX-02: VIP Bypass logic (Number-level or Caller-level)
+  const isVipBypass = (phoneRecord as any).dndBypass || (phoneRecord as any).isVip || contactIsVip;
+
+  if (!isVipBypass) {
+    const businessHour = await db.businessHour.findFirst({
+      where: { tenantId: tenant.id, dayOfWeek },
+    });
+
+    if (businessHour) {
+      if (!businessHour.isOpen) {
+        isOpen = false;
+      } else if (businessHour.openTime && businessHour.closeTime) {
+        const currentMinutes = tenantNow.getHours() * 60 + tenantNow.getMinutes();
+        const [openH, openM] = businessHour.openTime.split(':').map(Number);
+        const [closeH, closeM] = businessHour.closeTime.split(':').map(Number);
+        const openMinutes = openH * 60 + (openM || 0);
+        const closeMinutes = closeH * 60 + (closeM || 0);
+        isOpen = currentMinutes >= openMinutes && currentMinutes < closeMinutes;
+      }
+    }
+  }
+
+
 
   // Create or reuse call record (idempotent for Twilio retries)
   const call = callSid
@@ -204,7 +235,9 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
     phoneNumberId: phoneRecord.id,
     callId: call.id,
     callerNumber: from,
-    startedAt: now.toISOString(),
+    dialedNumber: to,
+    contactId,
+    startedAt: new Date().toISOString(),
     voiceLanguage: receptionist.voiceLanguage || 'en',
   });
 
@@ -219,7 +252,8 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
   }).catch((err: unknown) => log.webhook.error({ error: err, callSid }, 'Failed to start call recording'));
 
   // Build greeting
-  let greeting = receptionist.greeting;
+  // CX-01: Custom opening greeting per phone number
+  let greeting = (phoneRecord as any).customGreeting || receptionist.greeting;
   const voiceLang = receptionist.voiceLanguage || 'en';
   if (!isOpen) {
     greeting = `Thank you for calling ${tenant.name}. We are currently closed. Our business hours are listed on our website. You can leave a message and we'll get back to you as soon as possible.`;
@@ -296,6 +330,13 @@ async function handleUserInput(callSid: string, from: string, input: string) {
     where: { tenantId: session.tenantId },
   });
 
+    // Find the transfer record
+    const transfer = await db.transfer.findFirst({
+      where: { call: { providerCallSid: callSid } } as any,
+      include: { tenant: true, call: true },
+      orderBy: { createdAt: 'desc' }
+    }) as any;
+
   // Get transfer rules
   const transferRules = await db.transferRule.findMany({
     where: { tenantId: session.tenantId, isActive: true },
@@ -353,6 +394,30 @@ async function handleUserInput(callSid: string, from: string, input: string) {
     })),
   });
 
+  // AI-09 & AI-10: Post-analysis Escalation detection
+  if (aiResponse.shouldEscalate && !aiResponse.shouldTransfer) {
+    const escalationRule = transferRules.find(
+      (r) => r.triggerType === 'intent' && r.triggerValue === 'escalation'
+    );
+    if (escalationRule) {
+      aiResponse.shouldTransfer = true;
+      aiResponse.transferTarget = escalationRule.targetValue;
+      aiResponse.transferDepartment = 'Escalation';
+    } else {
+      // Fallback: look for Management or Escalation department in directory
+      const managerMatch = directory.find(
+        (d) =>
+          d.department?.toLowerCase() === 'management' ||
+          d.department?.toLowerCase() === 'escalation'
+      );
+      if (managerMatch) {
+        aiResponse.shouldTransfer = true;
+        aiResponse.transferTarget = (managerMatch.phoneNumber || managerMatch.extension) as string | undefined;
+        aiResponse.transferDepartment = 'Management';
+      }
+    }
+  }
+
   // Log transcript
   await db.transcript.createMany({
     data: [
@@ -388,7 +453,37 @@ async function handleUserInput(callSid: string, from: string, input: string) {
     },
   });
 
-  if (aiResponse.leadScore >= 80) {
+  // CX-04: Capture Lead if AI extracted leadData
+  if (aiResponse.leadData) {
+    try {
+      const lead = await (db as any).lead.upsert({
+        where: { callId: session.callId },
+        create: {
+          tenantId: session.tenantId,
+          callId: session.callId,
+          name: aiResponse.leadData.name,
+          email: aiResponse.leadData.email,
+          intent: aiResponse.leadData.intent,
+          phone: session.callerNumber,
+          source: 'voice',
+        },
+        update: {
+          name: aiResponse.leadData.name,
+          email: aiResponse.leadData.email,
+          intent: aiResponse.leadData.intent,
+        },
+      });
+
+      // HubSpot Lead Sync
+      HubSpotService.syncLead(session.tenantId, lead.id).catch((err) => 
+        log.webhook.error({ error: err, leadId: lead.id }, 'Background HubSpot lead sync failed')
+      );
+    } catch (err) {
+      log.webhook.error({ error: err, callId: session.callId }, 'Lead persistence error');
+    }
+  }
+
+  if (aiResponse.leadScore >= 80 || aiResponse.leadData) {
     const alreadyFlagged = await db.callEvent.findFirst({
       where: { callId: session.callId, type: 'high_value_lead' },
       select: { id: true },
@@ -414,6 +509,37 @@ async function handleUserInput(callSid: string, from: string, input: string) {
       escalated: aiResponse.shouldEscalate,
     },
   });
+
+  // AI-04: Schedule callback if detected
+  const callbackMatch = aiResponse.text.match(/\[SCHEDULE_CALLBACK:([^\]]+)\]/);
+  if (callbackMatch) {
+    const scheduledTime = new Date(callbackMatch[1]);
+    if (!isNaN(scheduledTime.getTime())) {
+      const scheduledTask = await (db as any).scheduledCall.create({
+        data: {
+          tenantId: session.tenantId,
+          contactId: session.contactId,
+          phoneNumberId: session.phoneNumberId,
+          type: 'CALLBACK',
+          scheduledTime,
+          metadata: {
+            to: session.callerNumber,
+            from: session.dialedNumber,
+            receptionistId: session.receptionistId,
+            initialMessage: `Hi, this is ${receptionist.name}. I'm calling you back as scheduled. How can I help?`
+          },
+        }
+      });
+      
+      const delayMs = Math.max(0, scheduledTime.getTime() - Date.now());
+      await enqueueOutboundTask(
+        { tenantId: session.tenantId, scheduledCallId: scheduledTask.id },
+        delayMs
+      );
+      
+      log.webhook.info({ callSid, scheduledTime }, 'Outbound callback scheduled via AI intent');
+    }
+  }
 
   // Handle transfer
   if (aiResponse.shouldTransfer && aiResponse.transferTarget) {
@@ -452,6 +578,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
         transferTo: transferNumber,
         callerId: phoneRecord?.number || process.env.TWILIO_PHONE_NUMBER,
         language: voiceLang,
+        statusCallback: buildTwilioWebhookUrl('/api/webhooks/twilio/voice/transfer-status'),
       }));
     }
   }
@@ -816,6 +943,86 @@ async function handleCallEnd(callSid: string, status: string) {
     } catch (err) {
       // Non-fatal — HubSpot may not be configured
       log.webhook.warn({ error: err, callSid }, 'HubSpot sync skipped');
+    }
+
+    // =========================================================================
+    // Phase 5: Outbound & Background Tasks (AI-02, AI-03)
+    // =========================================================================
+    try {
+      const receptionist = await db.aIReceptionist.findUnique({
+        where: { id: session.receptionistId },
+      });
+
+      if (receptionist) {
+        // AI-03: SMS Summary after call
+        if ((receptionist as any).enableSmsFollowup) {
+          const body = (receptionist as any).smsSummaryTemplate || 
+            `Thanks for calling ${receptionist.name}! We've logged your interest.`;
+          
+          const scheduledTask = await (db as any).scheduledCall.create({
+            data: {
+              tenantId: session.tenantId,
+              contactId: session.contactId,
+              phoneNumberId: session.phoneNumberId,
+              type: 'SMS_SUMMARY',
+              scheduledTime: new Date(), // Immediate
+              metadata: { 
+                to: session.callerNumber, 
+                body,
+                callId: session.callId 
+              },
+            }
+          });
+          await enqueueOutboundTask({ 
+            tenantId: session.tenantId, 
+            scheduledCallId: scheduledTask.id 
+          });
+        }
+
+        // AI-02: Missed call follow-up
+        if ((receptionist as any).enableMissedCallFollowup && (status === 'busy' || status === 'no-answer' || status === 'failed')) {
+          const delaySeconds = (receptionist as any).missedCallFollowupDelay || 600;
+          const scheduledTime = new Date(Date.now() + delaySeconds * 1000);
+          
+          const scheduledTask = await (db as any).scheduledCall.create({
+            data: {
+              tenantId: session.tenantId,
+              contactId: session.contactId,
+              phoneNumberId: session.phoneNumberId,
+              type: 'FOLLOW_UP',
+              scheduledTime,
+              metadata: {
+                to: session.callerNumber,
+                from: session.dialedNumber,
+                receptionistId: session.receptionistId,
+                initialMessage: `Hi, this is a follow-up to your earlier call. Sorry we missed you. How can I help?`
+              },
+            }
+          });
+          
+          await enqueueOutboundTask(
+            { tenantId: session.tenantId, scheduledCallId: scheduledTask.id },
+            delaySeconds * 1000
+          );
+          
+          log.webhook.info({ callSid, scheduledTime }, 'Outbound follow-up scheduled for missed call');
+        }
+
+        // DASH-01: Missed call alerts (Email + WhatsApp)
+        if (status === 'busy' || status === 'no-answer' || status === 'failed') {
+          const { NotificationService } = await import('@/lib/services/notification.service');
+          await NotificationService.broadcastMissedCallAlert({
+            tenantId: session.tenantId,
+            callerNumber: session.callerNumber || '',
+            dialedNumber: session.dialedNumber || '',
+            status: status.toUpperCase(),
+            startedAt: session.startedAt,
+            receptionistName: receptionist.name,
+          }).catch(err => log.webhook.error({ err }, 'Failed to broadcast missed call alert'));
+        }
+      }
+    } catch (err) {
+      log.webhook.error({ error: err, callSid }, 'Failed to schedule outbound follow-up tasks');
     }
 
     // Clean up Redis sessions

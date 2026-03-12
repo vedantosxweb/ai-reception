@@ -476,6 +476,7 @@ GUARDRAILS (MUST FOLLOW):
       transferTarget: analysis.transferTarget,
       bookingData: bookingComplete ? bookingData : context.metadata?.bookingData,
       leadScore: analysis.leadScore,
+      leadData: analysis.leadData || context.metadata?.leadData,
     };
 
     // Persist updated context back to Redis
@@ -499,6 +500,7 @@ GUARDRAILS (MUST FOLLOW):
       bookingComplete,
       availabilityCheckRequest,
       leadScore: analysis.leadScore,
+      leadData: analysis.leadData,
       sendSms: shouldSendSms,
       smsContent: shouldSendSms ? responseText : undefined,
       tokenUsage: result.tokenUsage,
@@ -549,6 +551,7 @@ function analyzeResponse(
   shouldEscalate: boolean;
   emergencyDetected: boolean;
   leadScore: number;
+  leadData?: Record<string, string>;
 } {
   const lower = userMessage.toLowerCase();
 
@@ -570,6 +573,7 @@ function analyzeResponse(
     { keywords: ['speak', 'human', 'person', 'manager', 'representative', 'agent', 'real person'], intent: 'escalation', confidence: 0.95 },
     { keywords: ['transfer', 'connect', 'put me through', 'talk to'], intent: 'transfer', confidence: 0.9 },
     { keywords: ['location', 'address', 'where are you', 'directions'], intent: 'location', confidence: 0.9 },
+    { keywords: ['call back', 'callback', 'phone back', 'call me later'], intent: 'callback_request', confidence: 0.95 },
   ];
 
   for (const { keywords, intent: i, confidence: c } of intentMap) {
@@ -581,8 +585,8 @@ function analyzeResponse(
   }
 
   // Sentiment analysis
-  const positiveWords = ['thank', 'great', 'awesome', 'helpful', 'perfect', 'excellent', 'appreciate', 'good', 'wonderful', 'yes', 'sure'];
-  const negativeWords = ['bad', 'terrible', 'awful', 'frustrated', 'angry', 'disappointed', 'hate', 'upset', 'complaint', 'problem', 'worst'];
+  const positiveWords = ['thank', 'great', 'awesome', 'helpful', 'perfect', 'excellent', 'appreciate', 'good', 'wonderful', 'yes', 'sure', 'glad'];
+  const negativeWords = ['bad', 'terrible', 'awful', 'frustrated', 'angry', 'disappointed', 'hate', 'upset', 'complaint', 'problem', 'worst', 'poor', 'sucks', 'annoyed', 'useless', 'horrible'];
 
   const posCount = positiveWords.filter((w) => lower.includes(w)).length;
   const negCount = negativeWords.filter((w) => lower.includes(w)).length;
@@ -590,6 +594,7 @@ function analyzeResponse(
   let sentiment: Sentiment = 'NEUTRAL';
   if (posCount > negCount) sentiment = 'POSITIVE';
   else if (negCount > posCount) sentiment = 'NEGATIVE';
+  else if (negCount > 0 && negCount === posCount) sentiment = 'NEUTRAL'; // Conflict resolution
 
   // Transfer detection
   let shouldTransfer = false;
@@ -601,6 +606,12 @@ function analyzeResponse(
   if (transferMatch) {
     shouldTransfer = true;
     transferTarget = transferMatch[1];
+  }
+
+  // AI-04: Check for [SCHEDULE_CALLBACK:timestamp] in AI response
+  const callbackMatch = aiResponse.match(/\[SCHEDULE_CALLBACK:([^\]]+)\]/);
+  if (callbackMatch) {
+    intent = 'callback_request';
   }
 
   // Check transfer rules
@@ -620,7 +631,11 @@ function analyzeResponse(
     }
   }
 
-  const shouldEscalate = intent === 'escalation' || emergencyDetected || (sentiment === 'NEGATIVE' && confidence < 0.5);
+  const shouldEscalate = 
+    intent === 'escalation' || 
+    emergencyDetected || 
+    (sentiment === 'NEGATIVE' && lower.includes('manager')) ||
+    (sentiment === 'NEGATIVE' && negCount >= 2);
 
   const baseByIntent: Record<string, number> = {
     booking: 75,
@@ -646,6 +661,18 @@ function analyzeResponse(
   if (shouldEscalate) leadScore += 5;
   leadScore = Math.max(0, Math.min(100, Math.round(leadScore)));
 
+  // Lead extraction from [LEAD:...] markers
+  let leadData: Record<string, string> | undefined;
+  const leadMatch = aiResponse.match(/\[LEAD:([^\]]+)\]/);
+  if (leadMatch) {
+    const fields = leadMatch[1].split('|');
+    leadData = {};
+    for (const f of fields) {
+      const [k, v] = f.split('=');
+      if (k && v) leadData[k.trim()] = v.trim();
+    }
+  }
+
   return {
     intent,
     sentiment,
@@ -656,6 +683,7 @@ function analyzeResponse(
     shouldEscalate,
     emergencyDetected,
     leadScore,
+    leadData,
   };
 }
 
@@ -705,6 +733,7 @@ export function buildReceptionistPrompt(config: {
   }).format(now);
 
   let prompt = `You are a PROFESSIONAL AI RECEPTIONIST for ${config.businessName}. You handle ${channelLabel}.
+Greeting to use: "${config.greeting}"
 ${lang !== 'en' ? `\nIMPORTANT: You MUST respond in ${languageName}. All your responses should be in ${languageName}.` : ''}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -727,6 +756,8 @@ YOUR BEHAVIOR
 3. Help schedule appointments (each appointment is ${meetingDuration} minutes)
 4. Detect when a transfer is needed
 5. Handle the conversation professionally
+6. If a caller requests a callback later, use the marker [SCHEDULE_CALLBACK:ISO_TIMESTAMP]. If no time is specified, use tomorrow at 9 AM local time. Use current time/date as reference.
+7. Always prioritize helping the customer directly before offering a callback.
 6. ${config.channel === 'voice' ? 'Keep responses SHORT (2-3 sentences). Speak naturally — do NOT read out markers like [BOOKING:...].' : 'Be thorough but concise.'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -753,6 +784,11 @@ RULE 4 — ONLY CONFIRM BOOKING AFTER CALLER AGREES:
   Example: [BOOKING:name=John Smith|date=2025-03-18|time=14:00|service=Consultation]
   
   After including [BOOKING:...], tell the caller: "Perfect, I've booked your appointment for [date] at [time]. You'll receive a confirmation shortly."
+
+RULE 5 — LEAD CAPTURE (IMPORTANT):
+  If the caller's Name or Email is missing from the "Customer Memory", you MUST attempt to capture them naturally.
+  Once captured, include: [LEAD:name=<name>|email=<email>|intent=<intent>]
+  Example: [LEAD:name=Alice Smith|email=alice@example.com|intent=Pricing inquiry]
 
 BOOKING FLOW (step by step):
 1. Ask for caller's full name

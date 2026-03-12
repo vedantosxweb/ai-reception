@@ -142,11 +142,11 @@ export class KnowledgeBaseService {
     return source.id;
   }
 
-  static async addTextSource(tenantId: string, receptionistId: string, name: string, content: string): Promise<string> {
+  static async addTextSource(tenantId: string, receptionistId: string | null, name: string, content: string): Promise<string> {
     const source = await db.knowledgeSource.create({
       data: {
         tenantId,
-        receptionistId,
+        receptionistId: receptionistId || null,
         type: 'TEXT',
         name,
         content,

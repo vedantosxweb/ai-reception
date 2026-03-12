@@ -27,7 +27,47 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
   });
 
-  return NextResponse.json({ success: true, data: receptionists });
+  // Fetch aggregate metrics for each receptionist
+  const receptionistMetrics = await Promise.all(
+    receptionists.map(async (r) => {
+      const calls = await db.call.findMany({
+        where: { receptionistId: r.id },
+        select: { 
+          status: true, 
+          sentiment: true,
+          _count: { select: { transfers: true } }
+        },
+      });
+
+      const totalCalls = calls.length;
+      if (totalCalls === 0) {
+        return { ...r, metrics: { resolutionRate: 0, avgSentiment: 0, successRate: 0 } };
+      }
+
+      const completed = calls.filter(c => c.status === 'COMPLETED').length;
+      const transferred = calls.filter(c => c._count.transfers > 0).length;
+      const resolutionRate = Math.round(((completed - transferred) / totalCalls) * 100);
+      
+      const sentiments: number[] = calls.map(c => {
+        if (c.sentiment === 'POSITIVE') return 1;
+        if (c.sentiment === 'NEGATIVE') return 0;
+        return 0.5;
+      });
+      const avgSentiment = Math.round((sentiments.reduce((a, b) => a + b, 0) / totalCalls) * 100);
+      const successRate = Math.round((completed / totalCalls) * 100);
+
+      return {
+        ...r,
+        metrics: {
+          resolutionRate: Math.max(0, resolutionRate),
+          avgSentiment,
+          successRate
+        }
+      };
+    })
+  );
+
+  return NextResponse.json({ success: true, data: receptionistMetrics });
 }
 
 // POST /api/v1/receptionists - Create new receptionist

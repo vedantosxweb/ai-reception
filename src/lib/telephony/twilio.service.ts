@@ -24,6 +24,36 @@ export function isTwilioConfigured(): boolean {
   return !!(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
 }
 
+/**
+ * Reusable helper for retrying failed API calls with exponential backoff
+ */
+async function withRetry<T>(
+  operation: () => Promise<T>,
+  maxRetries: number = 3,
+  delay: number = 1000
+): Promise<T> {
+  let lastError: Error | undefined;
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await operation();
+    } catch (err) {
+      lastError = err as Error;
+      // Triggers for transient errors (429, 500, 503)
+      const shouldRetry = lastError.message?.includes('429') || 
+                         lastError.message?.includes('500') || 
+                         lastError.message?.includes('503') ||
+                         lastError.message?.includes('ETIMEDOUT') ||
+                         lastError.message?.includes('ECONNREFUSED');
+      
+      if (!shouldRetry || i === maxRetries - 1) break;
+      
+      const jitter = Math.random() * 200;
+      await new Promise(resolve => setTimeout(resolve, delay * Math.pow(2, i) + jitter));
+    }
+  }
+  throw lastError;
+}
+
 // =============================================================================
 // TwiML Builders
 // =============================================================================
@@ -177,6 +207,7 @@ export function buildTransferTwiML(options: {
   voiceName?: string;
   callerId?: string;
   language?: string;
+  statusCallback?: string;
 }): string {
   const VoiceResponse = twilio.twiml.VoiceResponse;
   const response = new VoiceResponse();
@@ -192,10 +223,16 @@ export function buildTransferTwiML(options: {
   const dial = response.dial({
     callerId: options.callerId || process.env.TWILIO_PHONE_NUMBER,
     timeout: 30,
-    action: undefined, // Will fallback to voicemail
+    action: options.statusCallback, // Use action to know when dial ends
   });
-
-  dial.number({}, options.transferTo);
+  
+  // Use Twilio's default wait music during dialing
+  dial.number({
+    url: 'http://com.twilio.music.classic.s3.amazonaws.com/Wait_and_Hope.mp3',
+    statusCallback: options.statusCallback,
+    statusCallbackEvent: ['completed'],
+    statusCallbackMethod: 'POST',
+  }, options.transferTo);
 
   // If transfer fails
   response.say(
@@ -265,15 +302,16 @@ export async function sendSMS(
   if (!client) return { success: false, error: 'Twilio not configured' };
 
   try {
-    const message = await client.messages.create({
+    const message = await withRetry(() => client.messages.create({
       to,
       from: from || process.env.TWILIO_PHONE_NUMBER!,
       body,
       statusCallback: buildTwilioWebhookUrl('/api/webhooks/twilio/status/sms'),
-    });
+    }));
 
     return { success: true, messageSid: message.sid };
   } catch (error) {
+    console.error('[Telephony] SMS send error:', error);
     return { success: false, error: (error as Error).message };
   }
 }
@@ -297,11 +335,11 @@ export async function sendWhatsApp(
       ? (from.startsWith('whatsapp:') ? from : `whatsapp:${from}`)
       : (process.env.TWILIO_WHATSAPP_NUMBER || `whatsapp:${process.env.TWILIO_PHONE_NUMBER}`);
 
-    const message = await client.messages.create({
+    const message = await withRetry(() => client.messages.create({
       to: whatsappTo,
       from: whatsappFrom,
       body,
-    });
+    }));
 
     return { success: true, messageSid: message.sid };
   } catch (error) {
@@ -377,7 +415,7 @@ export async function makeOutboundCall(
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const call = await client.calls.create(callParams as any);
+    const call = await withRetry(() => client.calls.create(callParams as any));
     return { success: true, callSid: call.sid };
   } catch (error) {
     return { success: false, error: (error as Error).message };
@@ -397,8 +435,65 @@ export async function hangupCall(callSid: string): Promise<boolean> {
 }
 
 // =============================================================================
-// Webhook Validation
+// SMS Messaging
 // =============================================================================
+
+export async function sendSms(options: {
+  to: string;
+  body: string;
+  tenantId: string;
+  from?: string;
+}): Promise<{ sid: string } | null> {
+  const client = getTwilioClient();
+  if (!client) return null;
+
+  try {
+    const from = options.from || process.env.TWILIO_PHONE_NUMBER;
+    const message = await client.messages.create({
+      to: options.to,
+      from,
+      body: options.body,
+    });
+    return { sid: message.sid };
+  } catch (error) {
+    console.error('[Telephony] Failed to send SMS:', error);
+    return null;
+  }
+}
+
+// =============================================================================
+// Outbound Calling
+// =============================================================================
+
+export async function initiateOutboundCall(options: {
+  to: string;
+  from: string;
+  tenantId: string;
+  receptionistId?: string;
+  message?: string;
+  callbackUrl?: string; // TwiML for when the call is answered
+}): Promise<{ sid: string } | null> {
+  const client = getTwilioClient();
+  if (!client) return null;
+
+  try {
+    const callUrl = options.callbackUrl || buildTwilioWebhookUrl('/api/webhooks/twilio/voice/outbound');
+    
+    const call = await client.calls.create({
+      to: options.to,
+      from: options.from,
+      url: callUrl,
+      method: 'POST',
+      // We can pass session-like data via URL params if needed
+    });
+
+    return { sid: call.sid };
+  } catch (error) {
+    console.error('[Telephony] Failed to initiate outbound call:', error);
+    return null;
+  }
+}
+
 
 export function validateTwilioWebhook(
   url: string,

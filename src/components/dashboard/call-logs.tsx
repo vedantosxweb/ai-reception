@@ -2,10 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Play, Square } from 'lucide-react';
+import { Loader2, Play, Square, Download, Search } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 
 interface CallLog {
   id: string;
@@ -57,9 +58,39 @@ export default function CallLogsPanel({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const res = await fetch(`/api/v1/calls/export`);
+      if (!res.ok) throw new Error('Export failed');
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `call-logs-${new Date().toISOString().split('T')[0]}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      toast.success('Call logs exported successfully');
+    } catch (err) {
+      toast.error('Failed to export call logs');
+    }
+  };
+
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // Debounce search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [search]);
+
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/v1/calls?page=${page}&limit=20`)
+    fetch(`/api/v1/calls?page=${page}&limit=20&q=${debouncedSearch}`)
       .then((r) => r.json())
       .then((res) => {
         if (res.success) {
@@ -71,7 +102,7 @@ export default function CallLogsPanel({ tenantId }: { tenantId: string }) {
       })
       .catch(() => toast.error('Network error loading call logs.'))
       .finally(() => setLoading(false));
-  }, [tenantId, page]);
+  }, [tenantId, page, debouncedSearch]);
 
   const formatDuration = (seconds: number | null) => {
     if (!seconds) return 'N/A';
@@ -79,15 +110,6 @@ export default function CallLogsPanel({ tenantId }: { tenantId: string }) {
     const s = seconds % 60;
     return `${m}:${String(s).padStart(2, '0')}`;
   };
-
-  const filtered = calls.filter((c) => {
-    if (!search) return true;
-    const s = search.toLowerCase();
-    return c.callerNumber.includes(s) ||
-      c.contact?.firstName.toLowerCase().includes(s) ||
-      c.contact?.lastName.toLowerCase().includes(s) ||
-      c.intent?.toLowerCase().includes(s);
-  });
 
   if (loading) {
     return <div className="h-64 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin" /></div>;
@@ -100,13 +122,23 @@ export default function CallLogsPanel({ tenantId }: { tenantId: string }) {
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white">Call Logs</h1>
           <p className="text-slate-500 mt-1">{total} total calls</p>
         </div>
-        <div className="w-64">
-          <Input
-            placeholder="Search calls..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="h-10"
-          />
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleExport}
+            className="flex items-center gap-2"
+          >
+            <Download className="w-4 h-4" /> Export CSV
+          </Button>
+          <div className="w-64">
+            <Input
+              placeholder="Search calls or transcripts..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-10"
+            />
+          </div>
         </div>
       </div>
 
@@ -128,13 +160,20 @@ export default function CallLogsPanel({ tenantId }: { tenantId: string }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.length === 0 && (
+                {calls.length === 0 && (
                   <tr>
                     <td colSpan={9} className="text-center py-12 text-slate-500">No calls found</td>
                   </tr>
                 )}
-                {filtered.map((call) => (
-                  <tr key={call.id} className="border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
+                {calls.map((call) => {
+                  const isMissed = call.status === 'FAILED' || call.status === 'BUSY' || call.status === 'NO_ANSWER';
+                  return (
+                    <tr 
+                      key={call.id} 
+                      className={`border-b border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors ${
+                        isMissed ? 'bg-red-50/50 dark:bg-red-900/10' : ''
+                      }`}
+                    >
                     <td className="py-3 px-4">
                       <div>
                         <p className="text-sm font-medium text-slate-900 dark:text-white">
@@ -189,7 +228,8 @@ export default function CallLogsPanel({ tenantId }: { tenantId: string }) {
                     </td>
                     <td className="py-3 px-4 text-xs text-slate-500">{new Date(call.startedAt).toLocaleString()}</td>
                   </tr>
-                ))}
+                );
+                })}
               </tbody>
             </table>
           </div>
