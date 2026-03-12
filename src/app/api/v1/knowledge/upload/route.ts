@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireOwnerOrAdmin } from '@/lib/api-auth';
 import { KnowledgeBaseService } from '@/lib/knowledge/knowledge.service';
-const pdf = require('pdf-parse');
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireOwnerOrAdmin();
@@ -22,6 +21,7 @@ export async function POST(req: NextRequest) {
     if (file) {
       const buffer = Buffer.from(await file.arrayBuffer());
       if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+        const pdf = require('pdf-parse');
         const data = await pdf(buffer);
         content = data.text;
         sourceType = 'TEXT'; // We store extracted text as TEXT source for now
