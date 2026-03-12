@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
 
     // Find the transfer record
     const transfer = await db.transfer.findFirst({
-      where: { call: { callSid } },
+      where: { call: { providerCallSid: callSid } },
       include: { tenant: true, call: true },
       orderBy: { createdAt: 'desc' }
     }) as any;
@@ -30,8 +30,7 @@ export async function POST(req: NextRequest) {
     await db.transfer.update({
       where: { id: transfer.id },
       data: { 
-        status: dialCallStatus === 'answered' ? 'COMPLETED' : 'FAILED',
-        error: dialCallStatus !== 'answered' ? dialCallStatus : undefined
+        status: dialCallStatus === 'answered' ? 'CONNECTED' : (dialCallStatus === 'no-answer' ? 'NO_ANSWER' : 'FAILED')
       }
     });
 
