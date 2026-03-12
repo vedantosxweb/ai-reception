@@ -7,11 +7,11 @@
 
 ### Business Execution Infrastructure
 
-- [ ] **BIZ-01**: Tenant can search and purchase an available local Twilio number from the dashboard.
-- [ ] **BIZ-02**: Purchased numbers are automatically configured with production webhook URLs for Voice, SMS, and WhatsApp.
-- [ ] **BIZ-03**: Phone numbers are bound to `tenantId` in the database.
-- [ ] **BIZ-04**: Tenant can view the status of their phone numbers (pending, active, released).
-- [ ] **BIZ-05**: System includes clear UI flows for bringing an external number (BYON).
+- [x] **BIZ-01**: Tenant can search and purchase an available local Twilio number from the dashboard.
+- [x] **BIZ-02**: Purchased numbers are automatically configured with production webhook URLs for Voice, SMS, and WhatsApp.
+- [x] **BIZ-03**: Phone numbers are bound to `tenantId` in the database.
+- [x] **BIZ-04**: Tenant can view the status of their phone numbers (pending, active, released).
+- [x] **BIZ-05**: System includes clear UI flows for bringing an external number (BYON).
 - [ ] **BIZ-06**: New tenants are routed through a 4-step onboarding wizard post-payment.
 - [ ] **BIZ-07**: Onboarding wizard records company info, creates the first AI, and provisions a number.
 
@@ -58,7 +58,7 @@
 - [ ] **TECH-03**: `/api/v1/health` endpoint checks database, Redis, and Twilio status.
 - [ ] **TECH-04**: Knowledge base ingestion endpoints enforce rate limits.
 - [ ] **TECH-05**: Twilio webhook failures trigger retry logic with exponential backoff.
-- [ ] **TECH-06**: Creem.io webhook event handlers enforce strict idempotency logic (no double processing).
+- [x] **TECH-06**: Creem.io webhook event handlers enforce strict idempotency logic (no double processing).
 
 ## Out of Scope
 
@@ -72,11 +72,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| BIZ-01 | Phase 1 | Pending |
-| BIZ-02 | Phase 1 | Pending |
-| BIZ-03 | Phase 1 | Pending |
-| BIZ-04 | Phase 1 | Pending |
-| BIZ-05 | Phase 1 | Pending |
+| BIZ-01 | Phase 1 | Complete |
+| BIZ-02 | Phase 1 | Complete |
+| BIZ-03 | Phase 1 | Complete |
+| BIZ-04 | Phase 1 | Complete |
+| BIZ-05 | Phase 1 | Complete |
 | BIZ-06 | Phase 2 | Pending |
 | BIZ-07 | Phase 2 | Pending |
 | CX-01 | Phase 3 | Pending |
@@ -111,7 +111,7 @@
 | TECH-03 | Phase 7 | Pending |
 | TECH-04 | Phase 7 | Pending |
 | TECH-05 | Phase 7 | Pending |
-| TECH-06 | Phase 7 | Pending |
+| TECH-06 | Phase 7 | Complete |
 
 **Coverage:**
 - v1 requirements: 40 total
