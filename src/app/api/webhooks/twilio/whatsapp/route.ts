@@ -210,6 +210,28 @@ async function buildAvailabilityMessage(
     const durationMin = tenant?.defaultMeetingDurationMinutes ?? 30;
     const requestedEnd = new Date(checkDate.getTime() + durationMin * 60 * 1000);
 
+    // NEW: Check business hours
+    const dayOfWeek = checkDate.getDay();
+    const businessHour = await db.businessHour.findFirst({
+      where: { tenantId, dayOfWeek },
+    });
+
+    if (!businessHour || !businessHour.isOpen) {
+      return `SLOT_UNAVAILABLE: We are closed on ${checkDate.toLocaleDateString('en-US', { weekday: 'long' })}. Please ask the caller to choose another day.`;
+    }
+
+    if (businessHour.openTime && businessHour.closeTime) {
+      const currentMinutes = checkDate.getHours() * 60 + checkDate.getMinutes();
+      const [openH, openM] = businessHour.openTime.split(':').map(Number);
+      const [closeH, closeM] = businessHour.closeTime.split(':').map(Number);
+      const openMinutes = openH * 60 + (openM || 0);
+      const closeMinutes = closeH * 60 + (closeM || 0);
+
+      if (currentMinutes < openMinutes || currentMinutes >= closeMinutes) {
+        return `SLOT_UNAVAILABLE: We are only open from ${businessHour.openTime} to ${businessHour.closeTime}. Please offer a time within those hours.`;
+      }
+    }
+
     const conflict = await db.appointment.findFirst({
       where: {
         tenantId,
@@ -378,6 +400,9 @@ async function handleWhatsAppMessage(
     timezone: tenant.timezone || 'UTC',
     defaultMeetingDurationMinutes: tenant.defaultMeetingDurationMinutes ?? 30,
     customerMemory: await buildCustomerMemoryContext(tenant.id, from),
+    businessHours: (await db.businessHour.findMany({ where: { tenantId: tenant.id } }))
+      .map(bh => `${['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][bh.dayOfWeek]}: ${bh.isOpen ? `${bh.openTime}-${bh.closeTime}` : 'Closed'}`)
+      .join(', '),
   });
 
   const aiConfig = {

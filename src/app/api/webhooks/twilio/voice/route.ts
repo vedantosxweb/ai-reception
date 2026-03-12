@@ -350,8 +350,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
   });
   const daysMap = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   const hoursStr = businessHours
-    .filter((h) => h.isOpen)
-    .map((h) => `${daysMap[h.dayOfWeek]}: ${h.openTime} - ${h.closeTime}`)
+    .map((h) => `${daysMap[h.dayOfWeek]}: ${h.isOpen ? `${h.openTime} - ${h.closeTime}` : 'Closed'}`)
     .join(', ');
 
   // Get conversation context from Redis
@@ -602,42 +601,64 @@ async function handleUserInput(callSid: string, from: string, input: string) {
       const durationMin = availTenant?.defaultMeetingDurationMinutes ?? 30;
       const requestedEnd = new Date(checkDate.getTime() + durationMin * 60 * 1000);
 
-      // Check if requested slot conflicts with existing appointments
-      const conflict = await db.appointment.findFirst({
-        where: {
-          tenantId: session.tenantId,
-          status: { in: ['scheduled', 'confirmed'] },
-          startTime: { lt: requestedEnd },
-          endTime: { gt: checkDate },
-        },
+      // NEW: Check business hours
+      const dayOfWeek = checkDate.getDay();
+      const businessHour = await db.businessHour.findFirst({
+        where: { tenantId: session.tenantId, dayOfWeek },
       });
 
-      if (!conflict) {
-        // SLOT AVAILABLE
-        const friendlyDate = checkDate.toLocaleDateString('en-US', {
-          weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
-        });
-        const friendlyTime = checkDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-        availabilityMessage = `SLOT_AVAILABLE: ${friendlyTime} on ${friendlyDate} is free and available for booking.`;
-      } else {
-        // SLOT UNAVAILABLE — find 3 nearest alternatives (Rule 2)
-        const slots = await CalendarService.getAvailability(session.tenantId, checkDate, durationMin);
-        // Sort by proximity to requested time
-        const requestedMs = checkDate.getTime();
-        const sorted = slots
-          .sort((a, b) => Math.abs(a.start.getTime() - requestedMs) - Math.abs(b.start.getTime() - requestedMs))
-          .slice(0, 3);
+      if (!businessHour || !businessHour.isOpen) {
+        availabilityMessage = `SLOT_UNAVAILABLE: We are closed on ${checkDate.toLocaleDateString('en-US', { weekday: 'long' })}. Please ask the caller to choose another day.`;
+      } else if (businessHour.openTime && businessHour.closeTime) {
+        const currentMinutes = checkDate.getHours() * 60 + checkDate.getMinutes();
+        const [openH, openM] = businessHour.openTime.split(':').map(Number);
+        const [closeH, closeM] = businessHour.closeTime.split(':').map(Number);
+        const openMinutes = openH * 60 + (openM || 0);
+        const closeMinutes = closeH * 60 + (closeM || 0);
 
-        if (sorted.length > 0) {
-          const altList = sorted.map((s) =>
-            s.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
-          ).join(', ');
-          const requestedTimeStr = checkDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          availabilityMessage = `SLOT_UNAVAILABLE: ${requestedTimeStr} is already taken. 3 nearest available times: ${altList}. Please offer these to the caller.`;
+        if (currentMinutes < openMinutes || currentMinutes >= closeMinutes) {
+          availabilityMessage = `SLOT_UNAVAILABLE: We are only open from ${businessHour.openTime} to ${businessHour.closeTime}. Please offer a time within those hours.`;
+        }
+      }
+
+      if (!availabilityMessage) {
+        // Check if requested slot conflicts with existing appointments
+        const conflict = await db.appointment.findFirst({
+          where: {
+            tenantId: session.tenantId,
+            status: { in: ['scheduled', 'confirmed'] },
+            startTime: { lt: requestedEnd },
+            endTime: { gt: checkDate },
+          },
+        });
+
+        if (!conflict) {
+          // SLOT AVAILABLE
+          const friendlyDate = checkDate.toLocaleDateString('en-US', {
+            weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+          });
+          const friendlyTime = checkDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+          availabilityMessage = `SLOT_AVAILABLE: ${friendlyTime} on ${friendlyDate} is free and available for booking.`;
         } else {
-          // No available slots on that day
-          const requestedTimeStr = checkDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
-          availabilityMessage = `SLOT_UNAVAILABLE: ${requestedTimeStr} is taken and there are no more available slots today. Please ask the caller to choose a different date.`;
+          // SLOT UNAVAILABLE — find 3 nearest alternatives (Rule 2)
+          const slots = await CalendarService.getAvailability(session.tenantId, checkDate, durationMin);
+          // Sort by proximity to requested time
+          const requestedMs = checkDate.getTime();
+          const sorted = slots
+            .sort((a, b) => Math.abs(a.start.getTime() - requestedMs) - Math.abs(b.start.getTime() - requestedMs))
+            .slice(0, 3);
+
+          if (sorted.length > 0) {
+            const altList = sorted.map((s) =>
+              s.start.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+            ).join(', ');
+            const requestedTimeStr = checkDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            availabilityMessage = `SLOT_UNAVAILABLE: ${requestedTimeStr} is already taken. 3 nearest available times: ${altList}. Please offer these to the caller.`;
+          } else {
+            // No available slots on that day
+            const requestedTimeStr = checkDate.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+            availabilityMessage = `SLOT_UNAVAILABLE: ${requestedTimeStr} is taken and there are no more available slots today. Please ask the caller to choose a different date.`;
+          }
         }
       }
     } catch (err) {
@@ -667,6 +688,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
           businessName: tenant?.name || 'Business',
           description: tenant?.description || undefined,
           greeting: receptionist.greeting,
+          businessHours: hoursStr,
           customPrompt: receptionist.systemPrompt || undefined,
           channel: 'voice',
           operatingMode: receptionist.operatingMode,
