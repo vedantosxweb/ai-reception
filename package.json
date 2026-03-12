@@ -71,6 +71,7 @@
     "@swc/helpers": "0.5.19",
     "@tanstack/react-query": "^5.82.0",
     "@tanstack/react-table": "^8.21.3",
+    "@upstash/redis": "^1.36.4",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.70.1",
     "cheerio": "^1.2.0",
