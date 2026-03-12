@@ -50,6 +50,7 @@ export class FAQBuilderService {
           llmModel: 'gpt-4o-mini',
           systemPrompt,
           temperature: 0.2,
+          maxTokens: 1000,
         }
       );
 
