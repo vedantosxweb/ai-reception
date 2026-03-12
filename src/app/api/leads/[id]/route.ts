@@ -4,9 +4,10 @@ import { requireSession } from '@/lib/api-auth';
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await params;
     const { session, error } = await requireSession();
     if (error) return error;
 
@@ -15,7 +16,7 @@ export async function PATCH(
 
     const lead = await db.lead.update({
       where: { 
-        id: params.id,
+        id,
         tenantId: session.user.tenantId
       },
       data: { status }
