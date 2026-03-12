@@ -82,7 +82,7 @@ export async function POST(req: NextRequest) {
     const greeting = `Hi, this is ${receptionist.name} calling from ${tenant.name}. How can I help you today?`;
     
     const twiml = buildGreetingTwiML({
-      text: greeting,
+      greeting: greeting,
       gatherUrl: buildTwilioWebhookUrl('/api/webhooks/twilio/voice'), // Subsequent input goes to main handler
       voiceName: 'Polly.Joanna',
       language: receptionist.voiceLanguage || 'en',

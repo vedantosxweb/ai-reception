@@ -143,6 +143,7 @@ export async function POST(req: NextRequest) {
         phoneNumberId: phoneRecord?.id || '',
         callId: call.id,
         callerNumber: fromNumber,
+        dialedNumber: normalizedTo,
         startedAt: now.toISOString(),
       });
     }
