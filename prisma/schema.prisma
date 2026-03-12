@@ -17,66 +17,66 @@ datasource db {
 // =============================================================================
 
 model Tenant {
-  id               String   @id @default(cuid())
-  name             String
-  slug             String   @unique
-  domain           String?  @unique
-  website          String?
-  description      String?
-  logoUrl          String?
-  industry         String?
-  timezone         String   @default("America/New_York")
-  defaultLanguage  String   @default("en")
-  status           TenantStatus @default(ACTIVE)
+  id              String       @id @default(cuid())
+  name            String
+  slug            String       @unique
+  domain          String?      @unique
+  website         String?
+  description     String?
+  logoUrl         String?
+  industry        String?
+  timezone        String       @default("America/New_York")
+  defaultLanguage String       @default("en")
+  status          TenantStatus @default(ACTIVE)
 
   // Billing (Creem.io)
-  billingCustomerId     String?  @unique @map("stripeCustomerId")
-  billingSubscriptionId String?  @unique @map("stripeSubscriptionId")
+  billingCustomerId     String? @unique @map("stripeCustomerId")
+  billingSubscriptionId String? @unique @map("stripeSubscriptionId")
 
   // Google Calendar
   googleCalendarId String?
 
   // Plan & limits
-  plan             PlanTier  @default(STARTER)
-  monthlyMinutes   Int       @default(100)
-  maxReceptionists Int       @default(1)
-  maxPhoneNumbers  Int       @default(1)
-  maxKnowledgeSources Int    @default(5)
-  trialEndsAt      DateTime?
-  defaultMeetingDurationMinutes Int @default(30)
-  meetingBufferMinutes          Int @default(0)
-  slotStepMinutes               Int @default(15)
-  revenueCurrency               String @default("USD")
-  defaultAppointmentValue       Float @default(200)
+  plan                          PlanTier  @default(STARTER)
+  monthlyMinutes                Int       @default(100)
+  maxReceptionists              Int       @default(1)
+  maxPhoneNumbers               Int       @default(1)
+  maxKnowledgeSources           Int       @default(5)
+  trialEndsAt                   DateTime?
+  defaultMeetingDurationMinutes Int       @default(30)
+  meetingBufferMinutes          Int       @default(0)
+  slotStepMinutes               Int       @default(15)
+  revenueCurrency               String    @default("USD")
+  defaultAppointmentValue       Float     @default(200)
   pricingCatalog                Json?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  users              User[]
-  subscriptions      Subscription[]
-  invoices           Invoice[]
-  aiReceptionists    AIReceptionist[]
-  phoneNumbers       PhoneNumber[]
-  knowledgeSources   KnowledgeSource[]
-  embeddings         Embedding[]
-  calls              Call[]
-  callEvents         CallEvent[]
-  transcripts        Transcript[]
-  transfers          Transfer[]
-  messages           SMSMessage[]
-  usageRecords       UsageRecord[]
-  auditLogs          AuditLog[]
-  contacts           Contact[]
-  appointments       Appointment[]
-  businessHours      BusinessHour[]
+  users                  User[]
+  subscriptions          Subscription[]
+  invoices               Invoice[]
+  aiReceptionists        AIReceptionist[]
+  phoneNumbers           PhoneNumber[]
+  knowledgeSources       KnowledgeSource[]
+  embeddings             Embedding[]
+  calls                  Call[]
+  callEvents             CallEvent[]
+  transcripts            Transcript[]
+  transfers              Transfer[]
+  messages               SMSMessage[]
+  usageRecords           UsageRecord[]
+  auditLogs              AuditLog[]
+  contacts               Contact[]
+  appointments           Appointment[]
+  businessHours          BusinessHour[]
   availabilityExceptions AvailabilityException[]
-  directories        DirectoryEntry[]
-  transferRules      TransferRule[]
-  conversations      Conversation[]
-  conversationMessages ConversationMessage[]
-  integrations       Integration[]
+  directories            DirectoryEntry[]
+  transferRules          TransferRule[]
+  conversations          Conversation[]
+  conversationMessages   ConversationMessage[]
+  integrations           Integration[]
 
   @@index([billingCustomerId])
   @@index([slug])
@@ -102,28 +102,28 @@ enum PlanTier {
 // =============================================================================
 
 model User {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  email        String
-  name         String
-  passwordHash String
-  role         UserRole @default(MEMBER)
-  avatar       String?
-  phone        String?
-  status       UserStatus @default(ACTIVE)
-  emailVerified Boolean @default(false)
-  lastLoginAt  DateTime?
-  resetToken   String?
+  id                String     @id @default(cuid())
+  tenantId          String
+  tenant            Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  email             String
+  name              String
+  passwordHash      String
+  role              UserRole   @default(MEMBER)
+  avatar            String?
+  phone             String?
+  status            UserStatus @default(ACTIVE)
+  emailVerified     Boolean    @default(false)
+  lastLoginAt       DateTime?
+  resetToken        String?
   resetTokenExpires DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  auditLogs             AuditLog[]
-  appointments          Appointment[] @relation("StaffAppointments")
-  passwordResetTokens   PasswordResetToken[]
+  auditLogs               AuditLog[]
+  appointments            Appointment[]            @relation("StaffAppointments")
+  passwordResetTokens     PasswordResetToken[]
   emailVerificationTokens EmailVerificationToken[]
 
   @@unique([tenantId, email])
@@ -150,19 +150,19 @@ enum UserStatus {
 // =============================================================================
 
 model Subscription {
-  id                   String   @id @default(cuid())
-  tenantId             String
-  tenant               Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  externalSubscriptionId String   @unique @map("stripeSubscriptionId")
-  externalProductId      String   @map("stripePriceId")
-  status               SubscriptionStatus @default(ACTIVE)
-  plan                 PlanTier
-  currentPeriodStart   DateTime
-  currentPeriodEnd     DateTime
-  cancelAtPeriodEnd    Boolean  @default(false)
-  cancelledAt          DateTime?
-  trialStart           DateTime?
-  trialEnd             DateTime?
+  id                     String             @id @default(cuid())
+  tenantId               String
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  externalSubscriptionId String             @unique @map("stripeSubscriptionId")
+  externalProductId      String             @map("stripePriceId")
+  status                 SubscriptionStatus @default(ACTIVE)
+  plan                   PlanTier
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean            @default(false)
+  cancelledAt            DateTime?
+  trialStart             DateTime?
+  trialEnd               DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -181,24 +181,24 @@ enum SubscriptionStatus {
 }
 
 model Invoice {
-  id               String   @id @default(cuid())
-  tenantId         String
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  externalInvoiceId  String   @unique @map("stripeInvoiceId")
-  amountDue        Int      // cents
-  amountPaid       Int      @default(0)
-  currency         String   @default("usd")
-  status           InvoiceStatus @default(DRAFT)
-  periodStart      DateTime
-  periodEnd        DateTime
-  pdfUrl           String?
-  hostedUrl        String?
+  id                String        @id @default(cuid())
+  tenantId          String
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  externalInvoiceId String        @unique @map("stripeInvoiceId")
+  amountDue         Int // cents
+  amountPaid        Int           @default(0)
+  currency          String        @default("usd")
+  status            InvoiceStatus @default(DRAFT)
+  periodStart       DateTime
+  periodEnd         DateTime
+  pdfUrl            String?
+  hostedUrl         String?
 
   // Usage breakdown
-  baseAmount       Int      @default(0)
-  usageAmount      Int      @default(0)
-  minutesUsed      Int      @default(0)
-  overageMinutes   Int      @default(0)
+  baseAmount     Int @default(0)
+  usageAmount    Int @default(0)
+  minutesUsed    Int @default(0)
+  overageMinutes Int @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -220,42 +220,42 @@ enum InvoiceStatus {
 // =============================================================================
 
 model AIReceptionist {
-  id           String   @id @default(cuid())
-  tenantId     String
-  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name         String
-  description  String?
-  status       ReceptionistStatus @default(DRAFT)
+  id          String             @id @default(cuid())
+  tenantId    String
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  status      ReceptionistStatus @default(DRAFT)
 
   // Voice config
-  voiceProvider  String   @default("openai")  // openai, elevenlabs, playht
-  voiceId        String   @default("alloy")
-  voiceSpeed     Float    @default(1.0)
-  voiceLanguage  String   @default("en")
+  voiceProvider String @default("openai") // openai, elevenlabs, playht
+  voiceId       String @default("alloy")
+  voiceSpeed    Float  @default(1.0)
+  voiceLanguage String @default("en")
 
   // LLM config
-  llmProvider    String   @default("openai")  // openai, anthropic
-  llmModel       String   @default("gpt-4o-mini")
-  temperature    Float    @default(0.7)
-  maxTokens      Int      @default(1024)
+  llmProvider String @default("openai") // openai, anthropic
+  llmModel    String @default("gpt-4o-mini")
+  temperature Float  @default(0.7)
+  maxTokens   Int    @default(1024)
 
   // STT config
-  sttProvider    String   @default("deepgram") // deepgram, openai, google
+  sttProvider String @default("deepgram") // deepgram, openai, google
 
   // Greeting & prompt
-  greeting       String   @default("Hello! Thank you for calling. How can I help you today?")
-  systemPrompt   String?
+  greeting        String  @default("Hello! Thank you for calling. How can I help you today?")
+  systemPrompt    String?
   fallbackMessage String  @default("I apologize, I'm having trouble understanding. Let me transfer you to someone who can help.")
 
   // Behavior
-  enableInterruptions    Boolean @default(true)
-  enableSmsFollowup      Boolean @default(true)
-  enableVoicemail        Boolean @default(true)
-  enableEmergencyDetect  Boolean @default(true)
-  neverSendToVoicemail   Boolean @default(false)
-  maxCallDuration        Int     @default(600)  // seconds
-  silenceTimeout         Int     @default(10)   // seconds
-  operatingMode          String  @default("standard") // standard, medical, legal
+  enableInterruptions   Boolean @default(true)
+  enableSmsFollowup     Boolean @default(true)
+  enableVoicemail       Boolean @default(true)
+  enableEmergencyDetect Boolean @default(true)
+  neverSendToVoicemail  Boolean @default(false)
+  maxCallDuration       Int     @default(600) // seconds
+  silenceTimeout        Int     @default(10) // seconds
+  operatingMode         String  @default("standard") // standard, medical, legal
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -281,17 +281,17 @@ enum ReceptionistStatus {
 // =============================================================================
 
 model PhoneNumber {
-  id              String   @id @default(cuid())
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receptionistId  String?
-  receptionist    AIReceptionist? @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
-  number          String   @unique
-  provider        String   @default("twilio")  // twilio, telnyx
-  providerSid     String?
-  friendlyName    String?
-  capabilities    String   @default("voice,sms") // voice, sms, mms
-  status          PhoneNumberStatus @default(ACTIVE)
+  id             String            @id @default(cuid())
+  tenantId       String
+  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receptionistId String?
+  receptionist   AIReceptionist?   @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
+  number         String            @unique
+  provider       String            @default("twilio") // twilio, telnyx
+  providerSid    String?
+  friendlyName   String?
+  capabilities   String            @default("voice,sms") // voice, sms, mms
+  status         PhoneNumberStatus @default(ACTIVE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -314,21 +314,21 @@ enum PhoneNumberStatus {
 // =============================================================================
 
 model KnowledgeSource {
-  id              String   @id @default(cuid())
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receptionistId  String?
-  receptionist    AIReceptionist? @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
-  type            KnowledgeSourceType
-  name            String
-  content         String?  // raw content
-  url             String?  // source URL
-  fileUrl         String?  // uploaded file URL
-  status          KnowledgeSourceStatus @default(PENDING)
-  metadata        Json?
-  chunkCount      Int      @default(0)
-  lastSyncedAt    DateTime?
-  errorMessage    String?
+  id             String                @id @default(cuid())
+  tenantId       String
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receptionistId String?
+  receptionist   AIReceptionist?       @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
+  type           KnowledgeSourceType
+  name           String
+  content        String? // raw content
+  url            String? // source URL
+  fileUrl        String? // uploaded file URL
+  status         KnowledgeSourceStatus @default(PENDING)
+  metadata       Json?
+  chunkCount     Int                   @default(0)
+  lastSyncedAt   DateTime?
+  errorMessage   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -356,16 +356,16 @@ enum KnowledgeSourceStatus {
 }
 
 model Embedding {
-  id               String   @id @default(cuid())
-  tenantId         String
-  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  id                String          @id @default(cuid())
+  tenantId          String
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   knowledgeSourceId String
-  knowledgeSource  KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id], onDelete: Cascade)
-  content          String   // text chunk
-  embedding        String?  // stored vector (JSON array) or external vector ID
-  vectorId         String?  // external vector DB ID (Pinecone, etc.)
-  metadata         Json?
-  chunkIndex       Int      @default(0)
+  knowledgeSource   KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id], onDelete: Cascade)
+  content           String // text chunk
+  embedding         String? // stored vector (JSON array) or external vector ID
+  vectorId          String? // external vector DB ID (Pinecone, etc.)
+  metadata          Json?
+  chunkIndex        Int             @default(0)
 
   createdAt DateTime @default(now())
 
@@ -379,46 +379,46 @@ model Embedding {
 // =============================================================================
 
 model Call {
-  id              String   @id @default(cuid())
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receptionistId  String?
-  receptionist    AIReceptionist? @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
-  phoneNumberId   String?
-  phoneNumber     PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  contactId       String?
-  contact         Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  id             String          @id @default(cuid())
+  tenantId       String
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  receptionistId String?
+  receptionist   AIReceptionist? @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
+  phoneNumberId  String?
+  phoneNumber    PhoneNumber?    @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  contactId      String?
+  contact        Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   // Call details
-  providerCallSid String?  @unique
+  providerCallSid String?       @unique
   callerNumber    String
   dialedNumber    String
   direction       CallDirection
-  status          CallStatus @default(RINGING)
-  duration        Int?     // seconds
+  status          CallStatus    @default(RINGING)
+  duration        Int? // seconds
   recordingUrl    String?
   recordingSid    String?
   costCents       Int?
 
   // AI analysis
-  summary         String?
-  sentiment       Sentiment?
-  intent          String?
-  resolved        Boolean  @default(false)
-  escalated       Boolean  @default(false)
+  summary   String?
+  sentiment Sentiment?
+  intent    String?
+  resolved  Boolean    @default(false)
+  escalated Boolean    @default(false)
 
   // Timestamps
-  startedAt       DateTime @default(now())
-  answeredAt      DateTime?
-  endedAt         DateTime?
+  startedAt  DateTime  @default(now())
+  answeredAt DateTime?
+  endedAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // Relations
-  callEvents   CallEvent[]
-  transcripts  Transcript[]
-  transfers    Transfer[]
+  callEvents  CallEvent[]
+  transcripts Transcript[]
+  transfers   Transfer[]
 
   @@index([tenantId])
   @@index([receptionistId])
@@ -450,13 +450,13 @@ enum Sentiment {
 }
 
 model CallEvent {
-  id       String   @id @default(cuid())
-  tenantId String
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId   String
-  call     Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
-  type     String   // speech_start, speech_end, ai_response, transfer, dtmf, interrupt, silence, error
-  data     Json?
+  id        String @id @default(cuid())
+  tenantId  String
+  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callId    String
+  call      Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
+  type      String // speech_start, speech_end, ai_response, transfer, dtmf, interrupt, silence, error
+  data      Json?
   latencyMs Int?
 
   createdAt DateTime @default(now())
@@ -467,15 +467,15 @@ model CallEvent {
 }
 
 model Transcript {
-  id       String   @id @default(cuid())
-  tenantId String
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId   String
-  call     Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
-  speaker  Speaker
-  content  String
-  startMs  Int?
-  endMs    Int?
+  id         String  @id @default(cuid())
+  tenantId   String
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callId     String
+  call       Call    @relation(fields: [callId], references: [id], onDelete: Cascade)
+  speaker    Speaker
+  content    String
+  startMs    Int?
+  endMs      Int?
   confidence Float?
 
   createdAt DateTime @default(now())
@@ -491,17 +491,17 @@ enum Speaker {
 }
 
 model Transfer {
-  id       String   @id @default(cuid())
-  tenantId String
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId   String
-  call     Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
-  type     TransferType
-  target   String   // phone number or extension
+  id         String         @id @default(cuid())
+  tenantId   String
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callId     String
+  call       Call           @relation(fields: [callId], references: [id], onDelete: Cascade)
+  type       TransferType
+  target     String // phone number or extension
   targetName String?
   department String?
-  reason   String?
-  status   TransferStatus @default(INITIATED)
+  reason     String?
+  status     TransferStatus @default(INITIATED)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -531,20 +531,20 @@ enum TransferStatus {
 // =============================================================================
 
 model SMSMessage {
-  id            String   @id @default(cuid())
+  id            String        @id @default(cuid())
   tenantId      String
-  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   phoneNumberId String?
-  phoneNumber   PhoneNumber? @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
+  phoneNumber   PhoneNumber?  @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
   contactId     String?
-  contact       Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  contact       Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
   direction     CallDirection
   fromNumber    String
   toNumber      String
   body          String
   providerSid   String?
-  status        String   @default("sent")
-  messageType   String   @default("text")  // text, link, booking_link, followup
+  status        String        @default("sent")
+  messageType   String        @default("text") // text, link, booking_link, followup
 
   createdAt DateTime @default(now())
 
@@ -558,17 +558,17 @@ model SMSMessage {
 // =============================================================================
 
 model UsageRecord {
-  id         String   @id @default(cuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  type       UsageType
-  quantity   Float    // minutes, count, etc.
-  unitCost   Float    @default(0) // cost per unit in cents
-  totalCost  Float    @default(0) // total cost in cents
-  callId     String?
-  metadata   Json?
+  id          String    @id @default(cuid())
+  tenantId    String
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  type        UsageType
+  quantity    Float // minutes, count, etc.
+  unitCost    Float     @default(0) // cost per unit in cents
+  totalCost   Float     @default(0) // total cost in cents
+  callId      String?
+  metadata    Json?
   periodStart DateTime
-  periodEnd  DateTime
+  periodEnd   DateTime
 
   createdAt DateTime @default(now())
 
@@ -592,17 +592,17 @@ enum UsageType {
 // =============================================================================
 
 model AuditLog {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action    String
-  resource  String
+  id         String  @id @default(cuid())
+  tenantId   String
+  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userId     String?
+  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String
+  resource   String
   resourceId String?
-  details   Json?
-  ipAddress String?
-  userAgent String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
 
   createdAt DateTime @default(now())
 
@@ -617,28 +617,28 @@ model AuditLog {
 // =============================================================================
 
 model Contact {
-  id         String   @id @default(cuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  firstName  String
-  lastName   String
-  email      String?
-  phone      String?
-  company    String?
-  position   String?
-  source     String?
-  status     String   @default("lead")
-  tags       Json?
-  notes      String?
-  hubspotContactId String?  // HubSpot CRM contact ID
-  lastContactAt DateTime?
+  id               String    @id @default(cuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  company          String?
+  position         String?
+  source           String?
+  status           String    @default("lead")
+  tags             Json?
+  notes            String?
+  hubspotContactId String? // HubSpot CRM contact ID
+  lastContactAt    DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  calls        Call[]
-  smsMessages  SMSMessage[]
-  appointments Appointment[]
+  calls         Call[]
+  smsMessages   SMSMessage[]
+  appointments  Appointment[]
   conversations Conversation[]
 
   @@index([tenantId])
@@ -666,7 +666,7 @@ model Appointment {
   status          String   @default("scheduled")
   source          String   @default("manual")
   notes           String?
-  externalEventId String?  // Google Calendar event ID
+  externalEventId String? // Google Calendar event ID
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -681,27 +681,27 @@ model Appointment {
 // =============================================================================
 
 model BusinessHour {
-  id        String   @id @default(cuid())
+  id        String  @id @default(cuid())
   tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  dayOfWeek Int      // 0-6 (Sunday-Saturday)
-  openTime  String   // "09:00"
-  closeTime String   // "17:00"
-  isOpen    Boolean  @default(true)
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dayOfWeek Int // 0-6 (Sunday-Saturday)
+  openTime  String // "09:00"
+  closeTime String // "17:00"
+  isOpen    Boolean @default(true)
 
   @@unique([tenantId, dayOfWeek])
   @@index([tenantId])
 }
 
 model AvailabilityException {
-  id          String   @id @default(cuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  dayOfWeek   Int      // 0-6 (Sunday-Saturday), used when exceptionDate is null for recurring
+  id            String    @id @default(cuid())
+  tenantId      String
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  dayOfWeek     Int // 0-6 (Sunday-Saturday), used when exceptionDate is null for recurring
   exceptionDate DateTime? // when set, block only this date; when null, recurring every dayOfWeek
-  startTime   String   // "12:00"
-  endTime     String   // "14:00"
-  label       String?  // e.g. "Lunch", "Team meeting"
+  startTime     String // "12:00"
+  endTime       String // "14:00"
+  label         String? // e.g. "Lunch", "Team meeting"
 
   createdAt DateTime @default(now())
 
@@ -710,16 +710,16 @@ model AvailabilityException {
 }
 
 model DirectoryEntry {
-  id         String   @id @default(cuid())
-  tenantId   String
-  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name       String
-  title      String?
-  department String?
-  extension  String?
+  id          String  @id @default(cuid())
+  tenantId    String
+  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name        String
+  title       String?
+  department  String?
+  extension   String?
   phoneNumber String?
-  email      String?
-  isDefault  Boolean  @default(false)
+  email       String?
+  isDefault   Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -729,16 +729,16 @@ model DirectoryEntry {
 }
 
 model TransferRule {
-  id          String   @id @default(cuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name        String
-  triggerType String   // intent, keyword, department, name, context
+  id           String  @id @default(cuid())
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  name         String
+  triggerType  String // intent, keyword, department, name, context
   triggerValue String
-  targetType  String   // phone, extension, department, voicemail
-  targetValue String
-  priority    Int      @default(0)
-  isActive    Boolean  @default(true)
+  targetType   String // phone, extension, department, voicemail
+  targetValue  String
+  priority     Int     @default(0)
+  isActive     Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -773,14 +773,14 @@ model Conversation {
 }
 
 model ConversationMessage {
-  id             String   @id @default(cuid())
+  id             String       @id @default(cuid())
   tenantId       String
-  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversationId String
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String   // user, assistant, system
+  role           String // user, assistant, system
   content        String
-  messageType    String   @default("text")
+  messageType    String       @default("text")
   metadata       Json?
   latencyMs      Int?
 
@@ -795,14 +795,14 @@ model ConversationMessage {
 // =============================================================================
 
 model Integration {
-  id          String   @id @default(cuid())
-  tenantId    String
-  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  provider    String   // hubspot, google_calendar, salesforce, etc.
-  status      String   @default("active") // active, inactive, error
-  credentials Json?    // Encrypted API keys/tokens
-  config      Json?    // Provider-specific config (e.g., calendar ID)
-  lastSyncAt  DateTime?
+  id           String    @id @default(cuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  provider     String // hubspot, google_calendar, salesforce, etc.
+  status       String    @default("active") // active, inactive, error
+  credentials  Json? // Encrypted API keys/tokens
+  config       Json? // Provider-specific config (e.g., calendar ID)
+  lastSyncAt   DateTime?
   errorMessage String?
 
   createdAt DateTime @default(now())
@@ -817,10 +817,10 @@ model Integration {
 // =============================================================================
 
 model PasswordResetToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
 
@@ -831,10 +831,10 @@ model PasswordResetToken {
 }
 
 model EmailVerificationToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String   @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String    @unique
   expiresAt DateTime
   usedAt    DateTime?
 
