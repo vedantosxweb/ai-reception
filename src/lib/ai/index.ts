@@ -128,26 +128,46 @@ class GeminiProvider implements LLMProvider {
     userMessage: string,
     _config: { temperature: number; maxTokens: number }
   ) {
-    const apiKey = (process.env.GEMINI_API_KEY || '').trim().replace(/^['"]|['"]$/g, '');
-    if (!apiKey) throw new Error('GEMINI_API_KEY not configured');
+    const rawKeys = (process.env.GEMINI_API_KEY || '').trim().replace(/^['"]|['"]$/g, '');
+    if (!rawKeys) throw new Error('GEMINI_API_KEY not configured');
 
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-2.0-flash' });
+    const apiKeys = rawKeys.split(',').map(k => k.trim()).filter(Boolean);
+    let lastError: any = null;
 
-    const geminiHistory = [
-      { role: 'user' as const, parts: [{ text: systemPrompt }] },
-      { role: 'model' as const, parts: [{ text: 'Understood. I am ready to assist as configured.' }] },
-      ...history.slice(-20).map((m) => ({
-        role: (m.role === 'user' ? 'user' : 'model') as 'user' | 'model',
-        parts: [{ text: m.content }],
-      })),
-    ];
+    for (const apiKey of apiKeys) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-2.0-flash' });
 
-    const chat = model.startChat({ history: geminiHistory });
-    const result = await chat.sendMessage(userMessage);
-    const text = result.response.text()?.trim() || '';
+        const geminiHistory = [
+          { role: 'user' as const, parts: [{ text: systemPrompt }] },
+          { role: 'model' as const, parts: [{ text: 'Understood. I am ready to assist as configured.' }] },
+          ...history.slice(-20).map((m) => ({
+            role: (m.role === 'user' ? 'user' : 'model') as 'user' | 'model',
+            parts: [{ text: m.content }],
+          })),
+        ];
 
-    return { text };
+        const chat = model.startChat({ history: geminiHistory });
+        const result = await chat.sendMessage(userMessage);
+        const text = result.response.text()?.trim() || '';
+
+        return { text };
+      } catch (err: any) {
+        lastError = err;
+        const errMsg = err.message?.toLowerCase() || '';
+        // If it's a quota or credit issue, try the next key
+        if (errMsg.includes('429') || errMsg.includes('quota') || errMsg.includes('limit') || errMsg.includes('credit')) {
+          console.warn(`[AI] Gemini key rotation: current key failed, trying next... Error: ${err.message}`);
+          continue;
+        }
+        // If it's another type of error, we might want to fail immediately, 
+        // but for robustness we'll try all keys for now.
+        console.error(`[AI] Gemini key failed with non-quota error: ${err.message}`);
+      }
+    }
+
+    throw lastError || new Error('All Gemini API keys failed');
   }
 }
 
