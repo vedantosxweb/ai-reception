@@ -96,8 +96,31 @@ export function getLanguageVoiceMap() {
 
 export function resolveVoiceAndLang(language?: string, voiceName?: string): { voice: SayVoice; lang: SayLanguage } {
   const langConfig = LANGUAGE_VOICE_MAP[language || 'en'] || LANGUAGE_VOICE_MAP['en'];
+  
+  // Centralized fallback logic:
+  // 1. Use voiceName if provided and NOT a generic default like 'alloy' or 'Polly.Joanna' (if we want to override those)
+  // 2. Otherwise use ELEVENLABS_DEFAULT_VOICE_ID if configured
+  // 3. Finally fall back to the language map default
+  
+  let resolvedVoice = voiceName;
+
+  // If voice is a generic default or empty, check for ElevenLabs environment default
+  const genericDefaults = ['alloy', 'Polly.Joanna', 'Polly.Aditi']; // Add common defaults to override
+  if (!resolvedVoice || genericDefaults.includes(resolvedVoice)) {
+    resolvedVoice = process.env.ELEVENLABS_DEFAULT_VOICE_ID || langConfig.voice;
+  }
+
+  // Handle ElevenLabs voice IDs
+  // If the voice doesn't start with Polly. or Google., and looks like an ID, assume it's ElevenLabs
+  if (resolvedVoice && !resolvedVoice.startsWith('Polly.') && !resolvedVoice.startsWith('Google.')) {
+    // Prefix with ElevenLabs. for Twilio integration if not already prefixed
+    if (!resolvedVoice.startsWith('ElevenLabs.')) {
+      resolvedVoice = `ElevenLabs.${resolvedVoice}`;
+    }
+  }
+
   return {
-    voice: (voiceName || langConfig.voice) as SayVoice,
+    voice: resolvedVoice as SayVoice,
     lang: langConfig.twimlLang as SayLanguage,
   };
 }

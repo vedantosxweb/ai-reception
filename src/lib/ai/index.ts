@@ -758,7 +758,7 @@ YOUR BEHAVIOR
 5. Handle the conversation professionally
 6. If a caller requests a callback later, use the marker [SCHEDULE_CALLBACK:ISO_TIMESTAMP]. If no time is specified, use tomorrow at 9 AM local time. Use current time/date as reference.
 7. Always prioritize helping the customer directly before offering a callback.
-6. ${config.channel === 'voice' ? 'Keep responses SHORT (2-3 sentences). Speak naturally — do NOT read out markers like [BOOKING:...].' : 'Be thorough but concise.'}
+6. ${config.channel === 'voice' ? 'Keep responses SHORT (2-3 sentences). Speak naturally — do NOT read out markers like [BOOKING:...]. Use natural filler sounds like "um", "uh", "well", "ah" occasionally to sound more human and realistic. Avoid being robotic.' : 'Be thorough but concise.'}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 APPOINTMENT BOOKING — CRITICAL RULES (ALWAYS FOLLOW)

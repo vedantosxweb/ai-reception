@@ -17,6 +17,7 @@ import {
   buildVoicemailTwiML,
   validateTwilioWebhook,
   startCallRecording,
+  resolveVoiceAndLang,
 } from '@/lib/telephony/twilio.service';
 import { buildTwilioWebhookUrl, shouldEnforceTwilioWebhookSignature } from '@/lib/telephony/webhook';
 import {
@@ -70,17 +71,21 @@ export async function POST(req: NextRequest) {
     }
 
     // Default: gather more input
-    const defaultLang = existingSession?.voiceLanguage;
+    const receptionist = existingSession?.receptionistId 
+      ? await db.aIReceptionist.findUnique({ where: { id: existingSession.receptionistId }, select: { voiceId: true } })
+      : null;
+
     return twimlResponse(buildResponseTwiML({
       text: 'I\'m still here. How can I help you?',
       gatherUrl: buildTwilioWebhookUrl('/api/webhooks/twilio/voice', req),
-      voiceName: 'Polly.Joanna',
-      language: defaultLang,
+      voiceName: receptionist?.voiceId,
+      language: existingSession?.voiceLanguage,
     }));
   } catch (error) {
     log.webhook.error({ error }, 'Voice webhook error');
+    const { voice, lang } = resolveVoiceAndLang();
     return twimlResponse(
-      '<Response><Say voice="Polly.Joanna">We apologize, but an error occurred. Please try again later.</Say><Hangup/></Response>'
+      `<Response><Say voice="${voice}" language="${lang}">We apologize, but an error occurred. Please try again later.</Say><Hangup/></Response>`
     );
   }
 }
@@ -98,8 +103,9 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
   });
 
   if (!phoneRecord || !phoneRecord.tenant || phoneRecord.tenant.status === 'CANCELLED') {
+    const { voice, lang } = resolveVoiceAndLang();
     return twimlResponse(
-      '<Response><Say voice="Polly.Joanna">This number is not currently in service. Goodbye.</Say><Hangup/></Response>'
+      `<Response><Say voice="${voice}" language="${lang}">This number is not currently in service. Goodbye.</Say><Hangup/></Response>`
     );
   }
 
@@ -113,8 +119,9 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
 
   if (isBlocked) {
     log.webhook.info({ callSid, from, tenantId: tenant.id }, 'Call rejected: Caller is in blocklist');
+    const { voice, lang } = resolveVoiceAndLang();
     return twimlResponse(
-      '<Response><Say voice="Polly.Joanna">I\'m sorry, your number has been restricted from calling this business. Goodbye.</Say><Reject/></Response>'
+      `<Response><Say voice="${voice}" language="${lang}">I\'m sorry, your number has been restricted from calling this business. Goodbye.</Say><Reject/></Response>`
     );
   }
 
@@ -125,8 +132,9 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
   }
 
   if (!receptionist || receptionist.status !== 'ACTIVE') {
+    const { voice, lang } = resolveVoiceAndLang();
     return twimlResponse(
-      '<Response><Say voice="Polly.Joanna">Thank you for calling. We are currently unable to take calls. Please try again later.</Say><Hangup/></Response>'
+      `<Response><Say voice="${voice}" language="${lang}">Thank you for calling. We are currently unable to take calls. Please try again later.</Say><Hangup/></Response>`
     );
   }
 
@@ -280,7 +288,7 @@ async function handleIncomingCall(callSid: string, from: string, to: string) {
   return twimlResponse(buildGreetingTwiML({
     greeting,
     gatherUrl,
-    voiceName: 'Polly.Joanna',
+    voiceName: receptionist.voiceId,
     language: voiceLang,
   }));
 }
@@ -290,8 +298,9 @@ async function handleUserInput(callSid: string, from: string, input: string) {
   const session = await getActiveCall(callSid);
 
   if (!session) {
+    const { voice, lang } = resolveVoiceAndLang();
     return twimlResponse(
-      '<Response><Say voice="Polly.Joanna">I apologize, but there was a session error. Please call again.</Say><Hangup/></Response>'
+      `<Response><Say voice="${voice}" language="${lang}">I apologize, but there was a session error. Please call again.</Say><Hangup/></Response>`
     );
   }
 
@@ -715,7 +724,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
     return twimlResponse(buildResponseTwiML({
       text: cleanAvailText || 'Let me check another time for you.',
       gatherUrl,
-      voiceName: 'Polly.Joanna',
+      voiceName: receptionist.voiceId,
       language: voiceLang,
     }));
   }
@@ -730,7 +739,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
       return twimlResponse(buildResponseTwiML({
         text: 'I need the appointment date and time to complete your booking.',
         gatherUrl,
-        voiceName: 'Polly.Joanna',
+        voiceName: receptionist.voiceId,
         language: voiceLang,
       }));
     }
@@ -772,7 +781,7 @@ async function handleUserInput(callSid: string, from: string, input: string) {
         return twimlResponse(buildResponseTwiML({
           text: retryText,
           gatherUrl,
-          voiceName: 'Polly.Joanna',
+          voiceName: receptionist.voiceId,
           language: voiceLang,
         }));
       }

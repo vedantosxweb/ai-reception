@@ -31,6 +31,7 @@ const envSchema = z.object({
 
   // ElevenLabs (TTS)
   ELEVENLABS_API_KEY: z.string().optional(),
+  ELEVENLABS_DEFAULT_VOICE_ID: z.string().optional(),
 
   // Twilio
   TWILIO_ACCOUNT_SID: z.string().optional(),
