@@ -87,6 +87,7 @@ export const receptionistCreateSchema = z.object({
   operatingMode: z.string().max(50).optional(),
   maxCallDuration: z.number().int().min(30).max(7200).optional(),
   silenceTimeout: z.number().int().min(1).max(120).optional(),
+  vapiAssistantId: z.string().max(200).optional(),
 });
 
 const receptionistStatusSchema = z.enum(['DRAFT', 'ACTIVE', 'PAUSED', 'ARCHIVED']);
@@ -106,6 +107,7 @@ export const phoneNumberUpdateSchema = z.object({
   receptionistId: z.string().nullable().optional(),
   friendlyName: z.string().max(120).nullable().optional(),
   status: z.enum(['ACTIVE', 'INACTIVE']).optional(),
+  vapiPhoneNumberId: z.string().max(200).optional(),
 });
 
 export const transferCreateSchema = z.object({

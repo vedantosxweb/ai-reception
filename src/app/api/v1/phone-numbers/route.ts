@@ -150,7 +150,7 @@ export async function PATCH(req: NextRequest) {
     if (!parsed.success) {
       return NextResponse.json({ success: false, error: parsed.error }, { status: 400 });
     }
-    const { id, receptionistId, friendlyName, status } = parsed.data;
+    const { id, receptionistId, friendlyName, status, vapiPhoneNumberId } = parsed.data;
 
     const existing = await db.phoneNumber.findFirst({
       where: { id, tenantId: session.user.tenantId },
@@ -174,6 +174,7 @@ export async function PATCH(req: NextRequest) {
     if (receptionistId !== undefined) updateData.receptionistId = receptionistId || null;
     if (friendlyName !== undefined) updateData.friendlyName = friendlyName;
     if (status) updateData.status = status;
+    if (vapiPhoneNumberId !== undefined) updateData.vapiPhoneNumberId = vapiPhoneNumberId;
 
     const updated = await db.phoneNumber.update({
       where: { id },

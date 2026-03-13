@@ -1,8 +1,3 @@
-// =============================================================================
-// AI Receptionist SaaS Platform - Production Database Schema
-// Multi-tenant, enterprise-grade schema with full isolation
-// =============================================================================
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -12,77 +7,657 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// =============================================================================
-// MULTI-TENANCY
-// =============================================================================
-
 model Tenant {
-  id              String       @id @default(cuid())
-  name            String
-  slug            String       @unique
-  domain          String?      @unique
-  website         String?
-  description     String?
-  logoUrl         String?
-  industry        String?
-  timezone        String       @default("America/New_York")
-  defaultLanguage String       @default("en")
-  status          TenantStatus @default(ACTIVE)
-
-  // Billing (Creem.io)
-  billingCustomerId     String? @unique @map("stripeCustomerId")
-  billingSubscriptionId String? @unique @map("stripeSubscriptionId")
-
-  // Google Calendar
-  googleCalendarId String?
-
-  // Plan & limits
-  plan                          PlanTier  @default(STARTER)
-  monthlyMinutes                Int       @default(100)
-  maxReceptionists              Int       @default(1)
-  maxPhoneNumbers               Int       @default(1)
-  maxKnowledgeSources           Int       @default(5)
+  id                            String                  @id @default(cuid())
+  name                          String
+  slug                          String                  @unique
+  domain                        String?                 @unique
+  website                       String?
+  description                   String?
+  logoUrl                       String?
+  industry                      String?
+  timezone                      String                  @default("America/New_York")
+  defaultLanguage               String                  @default("en")
+  status                        TenantStatus            @default(ACTIVE)
+  billingCustomerId             String?                 @unique @map("stripeCustomerId")
+  billingSubscriptionId         String?                 @unique @map("stripeSubscriptionId")
+  plan                          PlanTier                @default(STARTER)
+  monthlyMinutes                Int                     @default(100)
+  maxReceptionists              Int                     @default(1)
+  maxPhoneNumbers               Int                     @default(1)
+  maxKnowledgeSources           Int                     @default(5)
   trialEndsAt                   DateTime?
-  defaultMeetingDurationMinutes Int       @default(30)
-  meetingBufferMinutes          Int       @default(0)
-  slotStepMinutes               Int       @default(15)
-  revenueCurrency               String    @default("USD")
-  defaultAppointmentValue       Float     @default(200)
+  createdAt                     DateTime                @default(now())
+  updatedAt                     DateTime                @updatedAt
+  googleCalendarId              String?
+  defaultMeetingDurationMinutes Int                     @default(30)
+  meetingBufferMinutes          Int                     @default(0)
+  slotStepMinutes               Int                     @default(15)
+  defaultAppointmentValue       Float                   @default(200)
   pricingCatalog                Json?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  users                  User[]
-  subscriptions          Subscription[]
-  invoices               Invoice[]
-  aiReceptionists        AIReceptionist[]
-  phoneNumbers           PhoneNumber[]
-  knowledgeSources       KnowledgeSource[]
-  embeddings             Embedding[]
-  calls                  Call[]
-  callEvents             CallEvent[]
-  transcripts            Transcript[]
-  transfers              Transfer[]
-  messages               SMSMessage[]
-  usageRecords           UsageRecord[]
-  auditLogs              AuditLog[]
-  leads                  Lead[]
-  contacts               Contact[]
-  appointments           Appointment[]
-  businessHours          BusinessHour[]
-  availabilityExceptions AvailabilityException[]
-  directories            DirectoryEntry[]
-  transferRules          TransferRule[]
-  conversations          Conversation[]
-  conversationMessages   ConversationMessage[]
-  integrations           Integration[]
-  blocklist              Blocklist[]
-  scheduledCalls         ScheduledCall[]
+  revenueCurrency               String                  @default("USD")
+  aiReceptionists               AIReceptionist[]
+  appointments                  Appointment[]
+  auditLogs                     AuditLog[]
+  availabilityExceptions        AvailabilityException[]
+  blocklist                     Blocklist[]
+  businessHours                 BusinessHour[]
+  calls                         Call[]
+  callEvents                    CallEvent[]
+  contacts                      Contact[]
+  conversations                 Conversation[]
+  conversationMessages          ConversationMessage[]
+  directories                   DirectoryEntry[]
+  embeddings                    Embedding[]
+  integrations                  Integration[]
+  invoices                      Invoice[]
+  knowledgeSources              KnowledgeSource[]
+  leads                         Lead[]
+  phoneNumbers                  PhoneNumber[]
+  messages                      SMSMessage[]
+  scheduledCalls                ScheduledCall[]
+  subscriptions                 Subscription[]
+  transcripts                   Transcript[]
+  transfers                     Transfer[]
+  transferRules                 TransferRule[]
+  usageRecords                  UsageRecord[]
+  users                         User[]
 
   @@index([billingCustomerId])
   @@index([slug])
+  @@index([status])
+}
+
+model User {
+  id                      String                   @id @default(cuid())
+  tenantId                String
+  email                   String
+  name                    String
+  passwordHash            String
+  role                    UserRole                 @default(MEMBER)
+  avatar                  String?
+  phone                   String?
+  status                  UserStatus               @default(ACTIVE)
+  emailVerified           Boolean                  @default(false)
+  lastLoginAt             DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  resetToken              String?
+  resetTokenExpires       DateTime?
+  appointments            Appointment[]            @relation("StaffAppointments")
+  auditLogs               AuditLog[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@index([email])
+  @@index([resetToken])
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  tenantId               String
+  externalSubscriptionId String             @unique @map("stripeSubscriptionId")
+  externalProductId      String             @map("stripePriceId")
+  status                 SubscriptionStatus @default(ACTIVE)
+  plan                   PlanTier
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime
+  cancelAtPeriodEnd      Boolean            @default(false)
+  cancelledAt            DateTime?
+  trialStart             DateTime?
+  trialEnd               DateTime?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  tenant                 Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([externalSubscriptionId])
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  tenantId          String
+  externalInvoiceId String        @unique @map("stripeInvoiceId")
+  amountDue         Int
+  amountPaid        Int           @default(0)
+  currency          String        @default("usd")
+  status            InvoiceStatus @default(DRAFT)
+  periodStart       DateTime
+  periodEnd         DateTime
+  pdfUrl            String?
+  hostedUrl         String?
+  baseAmount        Int           @default(0)
+  usageAmount       Int           @default(0)
+  minutesUsed       Int           @default(0)
+  overageMinutes    Int           @default(0)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([externalInvoiceId])
+}
+
+model AIReceptionist {
+  id                       String             @id @default(cuid())
+  tenantId                 String
+  name                     String
+  description              String?
+  status                   ReceptionistStatus @default(DRAFT)
+  voiceProvider            String             @default("openai")
+  voiceId                  String             @default("alloy")
+  voiceSpeed               Float              @default(1.0)
+  voiceLanguage            String             @default("en")
+  llmProvider              String             @default("openai")
+  llmModel                 String             @default("gpt-4o-mini")
+  temperature              Float              @default(0.7)
+  maxTokens                Int                @default(1024)
+  sttProvider              String             @default("deepgram")
+  greeting                 String             @default("Hello! Thank you for calling. How can I help you today?")
+  systemPrompt             String?
+  fallbackMessage          String             @default("I apologize, I'm having trouble understanding. Let me transfer you to someone who can help.")
+  enableInterruptions      Boolean            @default(true)
+  enableSmsFollowup        Boolean            @default(true)
+  enableVoicemail          Boolean            @default(true)
+  enableEmergencyDetect    Boolean            @default(true)
+  neverSendToVoicemail     Boolean            @default(false)
+  maxCallDuration          Int                @default(600)
+  silenceTimeout           Int                @default(10)
+  operatingMode            String             @default("standard")
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+  enableMissedCallFollowup Boolean            @default(false)
+  missedCallFollowupDelay  Int                @default(600)
+  smsSummaryTemplate       String?
+  vapiAssistantId          String?
+  tenant                   Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  calls                    Call[]
+  knowledgeSources         KnowledgeSource[]
+  phoneNumbers             PhoneNumber[]
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model PhoneNumber {
+  id                String            @id @default(cuid())
+  tenantId          String
+  receptionistId    String?
+  number            String            @unique
+  provider          String            @default("twilio")
+  providerSid       String?
+  friendlyName      String?
+  capabilities      String            @default("voice,sms")
+  status            PhoneNumberStatus @default(ACTIVE)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  customGreeting    String?
+  dndBypass         Boolean           @default(false)
+  isVip             Boolean           @default(false)
+  vapiPhoneNumberId String?
+  calls             Call[]
+  receptionist      AIReceptionist?   @relation(fields: [receptionistId], references: [id])
+  tenant            Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  smsMessages       SMSMessage[]
+  scheduledCalls    ScheduledCall[]
+
+  @@index([tenantId])
+  @@index([number])
+}
+
+model KnowledgeSource {
+  id             String                @id @default(cuid())
+  tenantId       String
+  receptionistId String?
+  type           KnowledgeSourceType
+  name           String
+  content        String?
+  url            String?
+  fileUrl        String?
+  status         KnowledgeSourceStatus @default(PENDING)
+  metadata       Json?
+  chunkCount     Int                   @default(0)
+  lastSyncedAt   DateTime?
+  errorMessage   String?
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+  embeddings     Embedding[]
+  receptionist   AIReceptionist?       @relation(fields: [receptionistId], references: [id])
+  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([receptionistId])
+  @@index([status])
+}
+
+model Embedding {
+  id                String          @id @default(cuid())
+  tenantId          String
+  knowledgeSourceId String
+  content           String
+  embedding         String?
+  vectorId          String?
+  metadata          Json?
+  chunkIndex        Int             @default(0)
+  createdAt         DateTime        @default(now())
+  knowledgeSource   KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id], onDelete: Cascade)
+  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([knowledgeSourceId])
+  @@index([vectorId])
+}
+
+model Call {
+  id              String          @id @default(cuid())
+  tenantId        String
+  receptionistId  String?
+  phoneNumberId   String?
+  contactId       String?
+  providerCallSid String?         @unique
+  callerNumber    String
+  dialedNumber    String
+  direction       CallDirection
+  status          CallStatus      @default(RINGING)
+  duration        Int?
+  recordingUrl    String?
+  recordingSid    String?
+  costCents       Int?
+  summary         String?
+  sentiment       Sentiment?
+  intent          String?
+  resolved        Boolean         @default(false)
+  escalated       Boolean         @default(false)
+  startedAt       DateTime        @default(now())
+  answeredAt      DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  contact         Contact?        @relation(fields: [contactId], references: [id])
+  phoneNumber     PhoneNumber?    @relation(fields: [phoneNumberId], references: [id])
+  receptionist    AIReceptionist? @relation(fields: [receptionistId], references: [id])
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  callEvents      CallEvent[]
+  lead            Lead?
+  transcripts     Transcript[]
+  transfers       Transfer[]
+
+  @@index([tenantId])
+  @@index([tenantId, startedAt(sort: Desc)])
+  @@index([receptionistId])
+  @@index([providerCallSid])
+  @@index([callerNumber])
+  @@index([startedAt])
+  @@index([status])
+}
+
+model CallEvent {
+  id        String   @id @default(cuid())
+  tenantId  String
+  callId    String
+  type      String
+  data      Json?
+  latencyMs Int?
+  createdAt DateTime @default(now())
+  call      Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([tenantId])
+  @@index([type])
+}
+
+model Transcript {
+  id         String   @id @default(cuid())
+  tenantId   String
+  callId     String
+  speaker    Speaker
+  content    String
+  startMs    Int?
+  endMs      Int?
+  confidence Float?
+  createdAt  DateTime @default(now())
+  call       Call     @relation(fields: [callId], references: [id], onDelete: Cascade)
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([tenantId])
+}
+
+model Transfer {
+  id         String         @id @default(cuid())
+  tenantId   String
+  callId     String
+  type       TransferType
+  target     String
+  targetName String?
+  department String?
+  reason     String?
+  status     TransferStatus @default(INITIATED)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  call       Call           @relation(fields: [callId], references: [id], onDelete: Cascade)
+  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([callId])
+  @@index([tenantId])
+}
+
+model SMSMessage {
+  id            String        @id @default(cuid())
+  tenantId      String
+  phoneNumberId String?
+  contactId     String?
+  direction     CallDirection
+  fromNumber    String
+  toNumber      String
+  body          String
+  providerSid   String?
+  status        String        @default("sent")
+  messageType   String        @default("text")
+  createdAt     DateTime      @default(now())
+  contact       Contact?      @relation(fields: [contactId], references: [id])
+  phoneNumber   PhoneNumber?  @relation(fields: [phoneNumberId], references: [id])
+  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([contactId])
+  @@index([phoneNumberId])
+}
+
+model UsageRecord {
+  id          String    @id @default(cuid())
+  tenantId    String
+  type        UsageType
+  quantity    Float
+  unitCost    Float     @default(0)
+  totalCost   Float     @default(0)
+  callId      String?
+  metadata    Json?
+  periodStart DateTime
+  periodEnd   DateTime
+  createdAt   DateTime  @default(now())
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([type])
+  @@index([periodStart, periodEnd])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String
+  userId     String?
+  action     String
+  resource   String
+  resourceId String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([tenantId])
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Contact {
+  id               String          @id @default(cuid())
+  tenantId         String
+  firstName        String
+  lastName         String
+  email            String?
+  phone            String?
+  company          String?
+  position         String?
+  source           String?
+  status           String          @default("lead")
+  tags             Json?
+  notes            String?
+  lastContactAt    DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  hubspotContactId String?
+  isVip            Boolean         @default(false)
+  appointments     Appointment[]
+  calls            Call[]
+  tenant           Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations    Conversation[]
+  smsMessages      SMSMessage[]
+  scheduledCalls   ScheduledCall[]
+
+  @@index([tenantId])
+  @@index([phone])
+  @@index([email])
+  @@index([tenantId, phone])
+}
+
+model Appointment {
+  id              String   @id @default(cuid())
+  tenantId        String
+  contactId       String
+  staffId         String?
+  title           String
+  description     String?
+  startTime       DateTime
+  endTime         DateTime
+  status          String   @default("scheduled")
+  source          String   @default("manual")
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  externalEventId String?
+  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  staff           User?    @relation("StaffAppointments", fields: [staffId], references: [id])
+  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([contactId])
+  @@index([startTime])
+}
+
+model BusinessHour {
+  id        String  @id @default(cuid())
+  tenantId  String
+  dayOfWeek Int
+  openTime  String
+  closeTime String
+  isOpen    Boolean @default(true)
+  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dayOfWeek])
+  @@index([tenantId])
+}
+
+model AvailabilityException {
+  id            String    @id @default(cuid())
+  tenantId      String
+  dayOfWeek     Int
+  exceptionDate DateTime?
+  startTime     String
+  endTime       String
+  label         String?
+  createdAt     DateTime  @default(now())
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, exceptionDate])
+}
+
+model DirectoryEntry {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String
+  title       String?
+  department  String?
+  extension   String?
+  phoneNumber String?
+  email       String?
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, department])
+}
+
+model TransferRule {
+  id           String   @id @default(cuid())
+  tenantId     String
+  name         String
+  triggerType  String
+  triggerValue String
+  targetType   String
+  targetValue  String
+  priority     Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, triggerType])
+}
+
+model Conversation {
+  id        String                @id @default(cuid())
+  tenantId  String
+  contactId String?
+  channel   String                @default("chat")
+  status    String                @default("active")
+  summary   String?
+  intent    String?
+  sentiment String?
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+  contact   Contact?              @relation(fields: [contactId], references: [id])
+  tenant    Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  messages  ConversationMessage[]
+
+  @@index([tenantId])
+  @@index([contactId])
+}
+
+model ConversationMessage {
+  id             String       @id @default(cuid())
+  tenantId       String
+  conversationId String
+  role           String
+  content        String
+  messageType    String       @default("text")
+  metadata       Json?
+  latencyMs      Int?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([tenantId])
+}
+
+model Integration {
+  id           String    @id @default(cuid())
+  tenantId     String
+  provider     String
+  status       String    @default("active")
+  credentials  Json?
+  config       Json?
+  lastSyncAt   DateTime?
+  errorMessage String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(cuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+  @@index([userId])
+}
+
+model Lead {
+  id        String     @id @default(cuid())
+  tenantId  String
+  callId    String?    @unique
+  name      String?
+  email     String?
+  phone     String?
+  intent    String?
+  status    LeadStatus @default(NEW)
+  source    String?    @default("voice")
+  details   Json?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  call      Call?      @relation(fields: [callId], references: [id])
+  tenant    Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([phone])
+}
+
+model Blocklist {
+  id        String   @id @default(cuid())
+  tenantId  String
+  number    String
+  reason    String?
+  source    String   @default("manual")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, number])
+  @@index([tenantId])
+}
+
+model ScheduledCall {
+  id            String              @id @default(cuid())
+  tenantId      String
+  contactId     String?
+  phoneNumberId String?
+  scheduledTime DateTime
+  type          ScheduledCallType
+  status        ScheduledCallStatus @default(PENDING)
+  metadata      Json?
+  retryCount    Int                 @default(0)
+  lastError     String?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  contact       Contact?            @relation(fields: [contactId], references: [id])
+  phoneNumber   PhoneNumber?        @relation(fields: [phoneNumberId], references: [id])
+  tenant        Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([scheduledTime])
   @@index([status])
 }
 
@@ -100,41 +675,6 @@ enum PlanTier {
   ENTERPRISE
 }
 
-// =============================================================================
-// USERS & AUTH
-// =============================================================================
-
-model User {
-  id                String     @id @default(cuid())
-  tenantId          String
-  tenant            Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  email             String
-  name              String
-  passwordHash      String
-  role              UserRole   @default(MEMBER)
-  avatar            String?
-  phone             String?
-  status            UserStatus @default(ACTIVE)
-  emailVerified     Boolean    @default(false)
-  lastLoginAt       DateTime?
-  resetToken        String?
-  resetTokenExpires DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  auditLogs               AuditLog[]
-  appointments            Appointment[]            @relation("StaffAppointments")
-  passwordResetTokens     PasswordResetToken[]
-  emailVerificationTokens EmailVerificationToken[]
-
-  @@unique([tenantId, email])
-  @@index([tenantId])
-  @@index([email])
-  @@index([resetToken])
-}
-
 enum UserRole {
   OWNER
   ADMIN
@@ -148,32 +688,6 @@ enum UserStatus {
   INVITED
 }
 
-// =============================================================================
-// BILLING & SUBSCRIPTIONS
-// =============================================================================
-
-model Subscription {
-  id                     String             @id @default(cuid())
-  tenantId               String
-  tenant                 Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  externalSubscriptionId String             @unique @map("stripeSubscriptionId")
-  externalProductId      String             @map("stripePriceId")
-  status                 SubscriptionStatus @default(ACTIVE)
-  plan                   PlanTier
-  currentPeriodStart     DateTime
-  currentPeriodEnd       DateTime
-  cancelAtPeriodEnd      Boolean            @default(false)
-  cancelledAt            DateTime?
-  trialStart             DateTime?
-  trialEnd               DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([externalSubscriptionId])
-}
-
 enum SubscriptionStatus {
   ACTIVE
   PAST_DUE
@@ -181,33 +695,6 @@ enum SubscriptionStatus {
   TRIALING
   INCOMPLETE
   PAUSED
-}
-
-model Invoice {
-  id                String        @id @default(cuid())
-  tenantId          String
-  tenant            Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  externalInvoiceId String        @unique @map("stripeInvoiceId")
-  amountDue         Int // cents
-  amountPaid        Int           @default(0)
-  currency          String        @default("usd")
-  status            InvoiceStatus @default(DRAFT)
-  periodStart       DateTime
-  periodEnd         DateTime
-  pdfUrl            String?
-  hostedUrl         String?
-
-  // Usage breakdown
-  baseAmount     Int @default(0)
-  usageAmount    Int @default(0)
-  minutesUsed    Int @default(0)
-  overageMinutes Int @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([externalInvoiceId])
 }
 
 enum InvoiceStatus {
@@ -218,63 +705,6 @@ enum InvoiceStatus {
   UNCOLLECTIBLE
 }
 
-// =============================================================================
-// AI RECEPTIONISTS
-// =============================================================================
-
-model AIReceptionist {
-  id          String             @id @default(cuid())
-  tenantId    String
-  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name        String
-  description String?
-  status      ReceptionistStatus @default(DRAFT)
-
-  // Voice config
-  voiceProvider String @default("openai") // openai, elevenlabs, playht
-  voiceId       String @default("alloy")
-  voiceSpeed    Float  @default(1.0)
-  voiceLanguage String @default("en")
-
-  // LLM config
-  llmProvider String @default("openai") // openai, anthropic
-  llmModel    String @default("gpt-4o-mini")
-  temperature Float  @default(0.7)
-  maxTokens   Int    @default(1024)
-
-  // STT config
-  sttProvider String @default("deepgram") // deepgram, openai, google
-
-  // Greeting & prompt
-  greeting        String  @default("Hello! Thank you for calling. How can I help you today?")
-  systemPrompt    String?
-  fallbackMessage String  @default("I apologize, I'm having trouble understanding. Let me transfer you to someone who can help.")
-
-  // Behavior
-  enableInterruptions   Boolean @default(true)
-  enableSmsFollowup     Boolean @default(true)
-  enableVoicemail       Boolean @default(true)
-  enableEmergencyDetect Boolean @default(true)
-  neverSendToVoicemail  Boolean @default(false)
-  enableMissedCallFollowup Boolean @default(false)
-  missedCallFollowupDelay Int     @default(600) // seconds
-  smsSummaryTemplate    String?
-  maxCallDuration       Int     @default(600) // seconds
-  silenceTimeout        Int     @default(10) // seconds
-  operatingMode         String  @default("standard") // standard, medical, legal
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  phoneNumbers     PhoneNumber[]
-  calls            Call[]
-  knowledgeSources KnowledgeSource[]
-
-  @@index([tenantId])
-  @@index([status])
-}
-
 enum ReceptionistStatus {
   DRAFT
   ACTIVE
@@ -282,72 +712,10 @@ enum ReceptionistStatus {
   ARCHIVED
 }
 
-// =============================================================================
-// PHONE NUMBERS
-// =============================================================================
-
-model PhoneNumber {
-  id             String            @id @default(cuid())
-  tenantId       String
-  tenant         Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receptionistId String?
-  receptionist   AIReceptionist?   @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
-  number         String            @unique
-  provider       String            @default("twilio") // twilio, telnyx
-  providerSid    String?
-  status         PhoneNumberStatus @default(ACTIVE)
-  friendlyName   String?
-  capabilities   String            @default("voice,sms") // voice, sms, mms
-  customGreeting String?
-  isVip          Boolean           @default(false)
-  dndBypass      Boolean           @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  calls       Call[]
-  smsMessages SMSMessage[]
-  scheduledCalls ScheduledCall[]
-
-  @@index([tenantId])
-  @@index([number])
-}
-
 enum PhoneNumberStatus {
   ACTIVE
   INACTIVE
   PENDING
-}
-
-// =============================================================================
-// KNOWLEDGE BASE
-// =============================================================================
-
-model KnowledgeSource {
-  id             String                @id @default(cuid())
-  tenantId       String
-  tenant         Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receptionistId String?
-  receptionist   AIReceptionist?       @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
-  type           KnowledgeSourceType
-  name           String
-  content        String? // raw content
-  url            String? // source URL
-  fileUrl        String? // uploaded file URL
-  status         KnowledgeSourceStatus @default(PENDING)
-  metadata       Json?
-  chunkCount     Int                   @default(0)
-  lastSyncedAt   DateTime?
-  errorMessage   String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  embeddings Embedding[]
-
-  @@index([tenantId])
-  @@index([receptionistId])
-  @@index([status])
 }
 
 enum KnowledgeSourceType {
@@ -363,81 +731,6 @@ enum KnowledgeSourceStatus {
   PROCESSING
   READY
   ERROR
-}
-
-model Embedding {
-  id                String          @id @default(cuid())
-  tenantId          String
-  tenant            Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  knowledgeSourceId String
-  knowledgeSource   KnowledgeSource @relation(fields: [knowledgeSourceId], references: [id], onDelete: Cascade)
-  content           String // text chunk
-  embedding         String? // stored vector (JSON array) or external vector ID
-  vectorId          String? // external vector DB ID (Pinecone, etc.)
-  metadata          Json?
-  chunkIndex        Int             @default(0)
-
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
-  @@index([knowledgeSourceId])
-  @@index([vectorId])
-}
-
-// =============================================================================
-// CALLS
-// =============================================================================
-
-model Call {
-  id             String          @id @default(cuid())
-  tenantId       String
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  receptionistId String?
-  receptionist   AIReceptionist? @relation(fields: [receptionistId], references: [id], onDelete: SetNull)
-  phoneNumberId  String?
-  phoneNumber    PhoneNumber?    @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  contactId      String?
-  contact        Contact?        @relation(fields: [contactId], references: [id], onDelete: SetNull)
-
-  // Call details
-  providerCallSid String?       @unique
-  callerNumber    String
-  dialedNumber    String
-  direction       CallDirection
-  status          CallStatus    @default(RINGING)
-  duration        Int? // seconds
-  recordingUrl    String?
-  recordingSid    String?
-  costCents       Int?
-
-  // AI analysis
-  summary   String?
-  sentiment Sentiment?
-  intent    String?
-  resolved  Boolean    @default(false)
-  escalated Boolean    @default(false)
-
-  // Timestamps
-  startedAt  DateTime  @default(now())
-  answeredAt DateTime?
-  endedAt    DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  callEvents  CallEvent[]
-  transcripts Transcript[]
-  transfers   Transfer[]
-  lead        Lead?
-
-  @@index([tenantId])
-  @@index([tenantId, startedAt(sort: Desc)])
-  @@index([receptionistId])
-  @@index([providerCallSid])
-  @@index([callerNumber])
-  @@index([startedAt])
-  @@index([status])
 }
 
 enum CallDirection {
@@ -461,65 +754,10 @@ enum Sentiment {
   NEGATIVE
 }
 
-model CallEvent {
-  id        String @id @default(cuid())
-  tenantId  String
-  tenant    Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId    String
-  call      Call   @relation(fields: [callId], references: [id], onDelete: Cascade)
-  type      String // speech_start, speech_end, ai_response, transfer, dtmf, interrupt, silence, error
-  data      Json?
-  latencyMs Int?
-
-  createdAt DateTime @default(now())
-
-  @@index([callId])
-  @@index([tenantId])
-  @@index([type])
-}
-
-model Transcript {
-  id         String  @id @default(cuid())
-  tenantId   String
-  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId     String
-  call       Call    @relation(fields: [callId], references: [id], onDelete: Cascade)
-  speaker    Speaker
-  content    String
-  startMs    Int?
-  endMs      Int?
-  confidence Float?
-
-  createdAt DateTime @default(now())
-
-  @@index([callId])
-  @@index([tenantId])
-}
-
 enum Speaker {
   CALLER
   AI
   SYSTEM
-}
-
-model Transfer {
-  id         String         @id @default(cuid())
-  tenantId   String
-  tenant     Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId     String
-  call       Call           @relation(fields: [callId], references: [id], onDelete: Cascade)
-  type       TransferType
-  target     String // phone number or extension
-  targetName String?
-  department String?
-  reason     String?
-  status     TransferStatus @default(INITIATED)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([callId])
-  @@index([tenantId])
 }
 
 enum TransferType {
@@ -538,57 +776,6 @@ enum TransferStatus {
   NO_ANSWER
 }
 
-// =============================================================================
-// SMS MESSAGES
-// =============================================================================
-
-model SMSMessage {
-  id            String        @id @default(cuid())
-  tenantId      String
-  tenant        Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  phoneNumberId String?
-  phoneNumber   PhoneNumber?  @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  contactId     String?
-  contact       Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  direction     CallDirection
-  fromNumber    String
-  toNumber      String
-  body          String
-  providerSid   String?
-  status        String        @default("sent")
-  messageType   String        @default("text") // text, link, booking_link, followup
-
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
-  @@index([contactId])
-  @@index([phoneNumberId])
-}
-
-// =============================================================================
-// USAGE TRACKING
-// =============================================================================
-
-model UsageRecord {
-  id          String    @id @default(cuid())
-  tenantId    String
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  type        UsageType
-  quantity    Float // minutes, count, etc.
-  unitCost    Float     @default(0) // cost per unit in cents
-  totalCost   Float     @default(0) // total cost in cents
-  callId      String?
-  metadata    Json?
-  periodStart DateTime
-  periodEnd   DateTime
-
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
-  @@index([type])
-  @@index([periodStart, periodEnd])
-}
-
 enum UsageType {
   VOICE_MINUTES
   SMS_SENT
@@ -599,336 +786,12 @@ enum UsageType {
   KNOWLEDGE_EMBEDDINGS
 }
 
-// =============================================================================
-// AUDIT LOGS
-// =============================================================================
-
-model AuditLog {
-  id         String  @id @default(cuid())
-  tenantId   String
-  tenant     Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  userId     String?
-  user       User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String
-  resource   String
-  resourceId String?
-  details    Json?
-  ipAddress  String?
-  userAgent  String?
-
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
-  @@index([userId])
-  @@index([action])
-  @@index([createdAt])
-}
-
-// =============================================================================
-// CONTACTS & CRM
-// =============================================================================
-
-model Contact {
-  id               String    @id @default(cuid())
-  tenantId         String
-  tenant           Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  firstName        String
-  lastName         String
-  email            String?
-  phone            String?
-  company          String?
-  position         String?
-  source           String?
-  status           String    @default("lead")
-  tags             Json?
-  notes            String?
-  hubspotContactId String? // HubSpot CRM contact ID
-  lastContactAt    DateTime?
-  isVip            Boolean           @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  calls         Call[]
-  smsMessages   SMSMessage[]
-  appointments  Appointment[]
-  conversations Conversation[]
-  scheduledCalls ScheduledCall[]
-
-  @@index([tenantId])
-  @@index([phone])
-  @@index([email])
-  @@index([tenantId, phone])
-}
-
-// =============================================================================
-// APPOINTMENTS
-// =============================================================================
-
-model Appointment {
-  id              String   @id @default(cuid())
-  tenantId        String
-  tenant          Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contactId       String
-  contact         Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
-  staffId         String?
-  staff           User?    @relation("StaffAppointments", fields: [staffId], references: [id], onDelete: SetNull)
-  title           String
-  description     String?
-  startTime       DateTime
-  endTime         DateTime
-  status          String   @default("scheduled")
-  source          String   @default("manual")
-  notes           String?
-  externalEventId String? // Google Calendar event ID
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([contactId])
-  @@index([startTime])
-}
-
-// =============================================================================
-// BUSINESS CONFIG
-// =============================================================================
-
-model BusinessHour {
-  id        String  @id @default(cuid())
-  tenantId  String
-  tenant    Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  dayOfWeek Int // 0-6 (Sunday-Saturday)
-  openTime  String // "09:00"
-  closeTime String // "17:00"
-  isOpen    Boolean @default(true)
-
-  @@unique([tenantId, dayOfWeek])
-  @@index([tenantId])
-}
-
-model AvailabilityException {
-  id            String    @id @default(cuid())
-  tenantId      String
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  dayOfWeek     Int // 0-6 (Sunday-Saturday), used when exceptionDate is null for recurring
-  exceptionDate DateTime? // when set, block only this date; when null, recurring every dayOfWeek
-  startTime     String // "12:00"
-  endTime       String // "14:00"
-  label         String? // e.g. "Lunch", "Team meeting"
-
-  createdAt DateTime @default(now())
-
-  @@index([tenantId])
-  @@index([tenantId, exceptionDate])
-}
-
-model DirectoryEntry {
-  id          String  @id @default(cuid())
-  tenantId    String
-  tenant      Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name        String
-  title       String?
-  department  String?
-  extension   String?
-  phoneNumber String?
-  email       String?
-  isDefault   Boolean @default(false)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([tenantId, department])
-}
-
-model TransferRule {
-  id           String  @id @default(cuid())
-  tenantId     String
-  tenant       Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  name         String
-  triggerType  String // intent, keyword, department, name, context
-  triggerValue String
-  targetType   String // phone, extension, department, voicemail
-  targetValue  String
-  priority     Int     @default(0)
-  isActive     Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([tenantId, triggerType])
-}
-
-// =============================================================================
-// CONVERSATIONS (Chat)
-// =============================================================================
-
-model Conversation {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contactId String?
-  contact   Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  channel   String   @default("chat")
-  status    String   @default("active")
-  summary   String?
-  intent    String?
-  sentiment String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  messages ConversationMessage[]
-
-  @@index([tenantId])
-  @@index([contactId])
-}
-
-model ConversationMessage {
-  id             String       @id @default(cuid())
-  tenantId       String
-  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversationId String
-  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  role           String // user, assistant, system
-  content        String
-  messageType    String       @default("text")
-  metadata       Json?
-  latencyMs      Int?
-
-  createdAt DateTime @default(now())
-
-  @@index([conversationId])
-  @@index([tenantId])
-}
-
-// =============================================================================
-// INTEGRATIONS (CRM, Calendar, etc.)
-// =============================================================================
-
-model Integration {
-  id           String    @id @default(cuid())
-  tenantId     String
-  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  provider     String // hubspot, google_calendar, salesforce, etc.
-  status       String    @default("active") // active, inactive, error
-  credentials  Json? // Encrypted API keys/tokens
-  config       Json? // Provider-specific config (e.g., calendar ID)
-  lastSyncAt   DateTime?
-  errorMessage String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([tenantId, provider])
-  @@index([tenantId])
-}
-
-// =============================================================================
-// PASSWORD RESET & EMAIL VERIFICATION TOKENS
-// =============================================================================
-
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-
-  createdAt DateTime @default(now())
-
-  @@index([token])
-  @@index([userId])
-}
-
-model EmailVerificationToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  token     String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-
-  createdAt DateTime @default(now())
-
-  @@index([token])
-  @@index([userId])
-}
-model Lead {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  callId    String?  @unique
-  call      Call?    @relation(fields: [callId], references: [id], onDelete: SetNull)
-  name      String?
-  email     String?
-  phone     String?
-  intent    String?
-  status    LeadStatus @default(NEW)
-  source    String?    @default("voice") // voice, sms, whatsapp
-  details   Json?
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([tenantId])
-  @@index([phone])
-}
-
-model Blocklist {
-  id        String   @id @default(cuid())
-  tenantId  String
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  number    String
-  reason    String?
-  source    String   @default("manual") // manual, auto_spam, community
-  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([tenantId, number])
-  @@index([tenantId])
-}
-
-
 enum LeadStatus {
   NEW
   CONTACTED
   QUALIFIED
   UNQUALIFIED
   CONVERTED
-}
-
-// =============================================================================
-// OUTBOUND & SCHEDULING
-// =============================================================================
-
-model ScheduledCall {
-  id             String              @id @default(cuid())
-  tenantId       String
-  tenant         Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  contactId      String?
-  contact        Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  phoneNumberId  String?
-  phoneNumber    PhoneNumber?        @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
-  
-  scheduledTime  DateTime
-  type           ScheduledCallType
-  status         ScheduledCallStatus @default(PENDING)
-  
-  metadata       Json?               // Includes template context, reason, etc.
-  retryCount     Int                 @default(0)
-  lastError      String?
-  
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
-
-  @@index([tenantId])
-  @@index([scheduledTime])
-  @@index([status])
 }
 
 enum ScheduledCallType {

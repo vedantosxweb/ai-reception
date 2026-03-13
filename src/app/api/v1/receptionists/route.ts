@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
       operatingMode,
       maxCallDuration,
       silenceTimeout,
+      vapiAssistantId,
     } = parsed.data;
 
     const receptionist = await db.aIReceptionist.create({
@@ -143,6 +144,7 @@ export async function POST(req: NextRequest) {
         operatingMode: operatingMode || 'standard',
         maxCallDuration: maxCallDuration ?? 600,
         silenceTimeout: silenceTimeout ?? 10,
+        vapiAssistantId,
       },
     });
 

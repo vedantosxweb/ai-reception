@@ -40,6 +40,10 @@ const envSchema = z.object({
   TWILIO_WHATSAPP_NUMBER: z.string().optional(),
   TWILIO_WEBHOOK_STRICT_VALIDATION: z.enum(['true', 'false']).optional(),
 
+  // Vapi.ai
+  VAPI_API_KEY: z.string().optional(),
+  VAPI_SERVER_URL: z.string().optional(),
+
   // Telnyx
   TELNYX_API_KEY: z.string().optional(),
 
