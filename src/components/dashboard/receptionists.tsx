@@ -28,6 +28,7 @@ interface Receptionist {
   enableVoicemail: boolean;
   neverSendToVoicemail: boolean;
   voiceLanguage: string;
+  vapiAssistantId: string | null;
   phoneNumbers: Array<{ id: string; number: string; status: string }>;
   _count: { calls: number; knowledgeSources: number };
   metrics?: {
@@ -54,6 +55,12 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
   const [operatingMode, setOperatingMode] = useState('standard');
   const [enableSms, setEnableSms] = useState(true);
   const [voiceLanguage, setVoiceLanguage] = useState('en');
+  const [vapiAssistantId, setVapiAssistantId] = useState('');
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editVapiId, setEditVapiId] = useState('');
 
   const LANGUAGES = [
     { value: 'en', label: 'English' },
@@ -101,6 +108,7 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
         body: JSON.stringify({
           name, description, greeting, llmProvider, voiceProvider, voiceId,
           operatingMode, enableSmsFollowup: enableSms, voiceLanguage,
+          vapiAssistantId: vapiAssistantId || undefined,
         }),
       });
       const data = await res.json();
@@ -144,6 +152,27 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
     if (!confirm('Are you sure you want to delete this receptionist?')) return;
     await fetch(`/api/v1/receptionists?id=${id}`, { method: 'DELETE' });
     loadData();
+  };
+
+  const updateVapiId = async () => {
+    if (!editingId) return;
+    try {
+      const res = await fetch('/api/v1/receptionists', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingId, name: editName, vapiAssistantId: editVapiId || null }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success('Receptionist updated.');
+        setEditingId(null);
+        loadData();
+      } else {
+        toast.error(data.error || 'Update failed.');
+      }
+    } catch {
+      toast.error('Network error.');
+    }
   };
 
   if (loading) {
@@ -224,9 +253,15 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex items-center justify-between">
-                <Label>SMS Follow-up</Label>
-                <Switch checked={enableSms} onCheckedChange={setEnableSms} />
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1">
+                  <Label>SMS Follow-up</Label>
+                  <Switch checked={enableSms} onCheckedChange={setEnableSms} />
+                </div>
+              </div>
+              <div>
+                <Label>Vapi Assistant ID (Optional)</Label>
+                <Input value={vapiAssistantId} onChange={(e) => setVapiAssistantId(e.target.value)} placeholder="e.g. 5d5e5f... (from Vapi dashboard)" />
               </div>
               <Button onClick={createReceptionist} disabled={creating} className="w-full">
                 {creating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
@@ -280,9 +315,9 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
                   <div className="text-slate-500">KB Sources: <span className="font-medium text-slate-900 dark:text-white">{r._count.knowledgeSources}</span></div>
                 </div>
 
-                {r.phoneNumbers.length > 0 && (
-                  <div className="text-xs text-slate-500">
-                    Phone: {r.phoneNumbers.map((p) => p.number).join(', ')}
+                {r.vapiAssistantId && (
+                  <div className="text-[10px] font-mono text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-1 rounded truncate" title={r.vapiAssistantId}>
+                    Vapi ID: {r.vapiAssistantId}
                   </div>
                 )}
 
@@ -321,6 +356,36 @@ export default function ReceptionistsPanel({ tenantId }: { tenantId: string }) {
                   >
                     {r.status === 'ACTIVE' ? <><Pause className="w-3 h-3 mr-1" /> Pause</> : <><Play className="w-3 h-3 mr-1" /> Activate</>}
                   </Button>
+                  <Dialog open={editingId === r.id} onOpenChange={(open) => {
+                    if (open) {
+                      setEditingId(r.id);
+                      setEditName(r.name);
+                      setEditVapiId(r.vapiAssistantId || '');
+                    } else setEditingId(null);
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button size="sm" variant="outline" title="Settings">
+                        <Settings className="w-3 h-3" />
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Edit Receptionist</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4 py-2">
+                        <div>
+                          <Label>Name</Label>
+                          <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                        </div>
+                        <div>
+                          <Label>Vapi Assistant ID</Label>
+                          <Input value={editVapiId} onChange={(e) => setEditVapiId(e.target.value)} placeholder="e.g. 5d5e5f..." />
+                          <p className="text-[10px] text-slate-500 mt-1">Found in your Vapi Assistant settings (Advanced tab)</p>
+                        </div>
+                        <Button onClick={updateVapiId} className="w-full bg-emerald-600 hover:bg-emerald-700">Save Changes</Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                   <Button size="sm" variant="outline" onClick={() => deleteReceptionist(r.id)}>
                     <Trash2 className="w-3 h-3" />
                   </Button>

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { Loader2, Phone, Plus, Trash2, Bot } from 'lucide-react';
+import { Loader2, Phone, Plus, Trash2, Bot, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -24,6 +24,7 @@ interface PhoneNumberConfig {
   status: string;
   receptionistId: string | null;
   receptionist: Receptionist | null;
+  vapiPhoneNumberId: string | null;
   _count: { calls: number; smsMessages: number };
   createdAt: string;
 }
@@ -38,6 +39,11 @@ export default function PhoneNumbersPanel({ tenantId }: { tenantId: string }) {
   const [isAdding, setIsAdding] = useState(false);
   const [newNumber, setNewNumber] = useState('');
   const [selectedReceptionistId, setSelectedReceptionistId] = useState<string | 'none'>('none');
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editVapiId, setEditVapiId] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
 
   const loadData = () => {
     setLoading(true);
@@ -121,6 +127,30 @@ export default function PhoneNumbersPanel({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const handleUpdateVapiId = async () => {
+    if (!editingId) return;
+    setIsUpdating(true);
+    try {
+        const res = await fetch('/api/v1/phone-numbers', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: editingId, vapiPhoneNumberId: editVapiId || null })
+        });
+        const data = await res.json();
+        if (data.success) {
+            toast.success('Vapi Phone ID updated');
+            setEditingId(null);
+            loadData();
+        } else {
+            toast.error(data.error || 'Update failed');
+        }
+    } catch {
+        toast.error('Network error');
+    } finally {
+        setIsUpdating(false);
+    }
+  };
+
   if (loading) {
     return <div className="h-64 flex items-center justify-center"><Loader2 className="w-5 h-5 animate-spin" /></div>;
   }
@@ -196,6 +226,11 @@ export default function PhoneNumbersPanel({ tenantId }: { tenantId: string }) {
                               </div>
                               <Badge variant={num.status === 'ACTIVE' ? 'default' : 'secondary'}>{num.status}</Badge>
                           </div>
+                          {num.vapiPhoneNumberId && (
+                              <div className="mt-2 text-[10px] font-mono text-blue-600 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded truncate">
+                                  Vapi ID: {num.vapiPhoneNumberId}
+                              </div>
+                          )}
                       </CardHeader>
                       <CardContent className="pt-4 space-y-4">
                           <div className="flex items-center justify-between">
@@ -218,7 +253,34 @@ export default function PhoneNumbersPanel({ tenantId }: { tenantId: string }) {
                               <div><span className="text-slate-500">Texts Linked:</span> <span className="font-semibold">{num._count.smsMessages}</span></div>
                           </div>
 
-                          <div className="pt-2 flex justify-end">
+                          <div className="pt-2 flex justify-end gap-2">
+                              <Dialog open={editingId === num.id} onOpenChange={(open) => {
+                                  if (open) {
+                                      setEditingId(num.id);
+                                      setEditVapiId(num.vapiPhoneNumberId || '');
+                                  } else setEditingId(null);
+                              }}>
+                                  <DialogTrigger asChild>
+                                      <Button variant="ghost" size="sm" title="Vapi Settings">
+                                          <Settings className="w-4 h-4" />
+                                      </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                      <DialogHeader>
+                                          <DialogTitle>Vapi Configuration</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="space-y-4 py-2">
+                                          <div className="space-y-2">
+                                              <Label>Vapi Phone ID</Label>
+                                              <Input value={editVapiId} onChange={e => setEditVapiId(e.target.value)} placeholder="e.g. 123-abc..." />
+                                              <p className="text-[10px] text-slate-500">Found in Vapi Dashboard &gt; Phone Numbers</p>
+                                          </div>
+                                          <Button className="w-full" onClick={handleUpdateVapiId} disabled={isUpdating}>
+                                              {isUpdating && <Loader2 className="w-4 h-4 mr-2 animate-spin" />} Save Settings
+                                          </Button>
+                                      </div>
+                                  </DialogContent>
+                              </Dialog>
                               <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600 hover:bg-red-50" onClick={() => handleDelete(num.id, num.provider)}>
                                   <Trash2 className="w-4 h-4 mr-2" /> Release
                               </Button>
